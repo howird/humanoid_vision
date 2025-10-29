@@ -33,11 +33,15 @@ dependencies = [
   # "neural-renderer-pytorch @ git+https://github.com/howird/NMR",
   "pyopengl @ git+https://github.com/mmatl/pyopengl",
   "pytube @ git+https://github.com/pytube/pytube",
+  "marimo",
 ]
 license = "MIT"
 authors = [
   { name = "Howard Nguyen-Huu", email = "howardnguyenhuu@gmail.com"}
 ]
+
+[tool.uv.sources]
+chumpy = { git = "https://github.com/howird/chumpy" }
 
 [project.urls]
 Homepage = ""
