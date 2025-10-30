@@ -7,7 +7,7 @@ from typing import Optional
 
 import numpy as np
 
-from humanoid_vision.models.hmar.hmr2 import HMR2023TextureSampler
+from humanoid_vision.models.hmar.hmar import HMAR
 from humanoid_vision.deep_sort.feature_distances import get_pose_distance
 
 
@@ -23,7 +23,7 @@ def _pdist_l2(a, b):
     return r2
 
 
-def _pdist(a, b, prediction_features, distance_type, shot, HMAR: Optional[HMR2023TextureSampler] = None):
+def _pdist(a, b, prediction_features, distance_type, shot, HMAR: Optional[HMAR] = None):
     a_appe, a_loca, a_pose, a_uv = [], [], [], []
     for i_ in range(len(a)):
         a_appe.append(a[i_][0])
@@ -172,18 +172,32 @@ class NearestNeighborDistanceMetric:
     """
 
     def __init__(
-        self, predict, distance_type, matching_threshold, budget, shot, HMAR: Optional[HMR2023TextureSampler] = None
+        self,
+        predict,
+        distance_type,
+        matching_threshold,
+        budget,
+        shot,
+        hmar: Optional[HMAR] = None,
     ):
         self.prediction_features = predict
         self.distance_type = distance_type
         self.matching_threshold = matching_threshold
         self.budget = budget
         self.shot = shot
-        self.HMAR = HMAR
+        self.hmar = hmar
 
         self.samples = {}
 
-    def partial_fit(self, appe_features, loca_features, pose_features, uv_maps, targets, active_targets):
+    def partial_fit(
+        self,
+        appe_features,
+        loca_features,
+        pose_features,
+        uv_maps,
+        targets,
+        active_targets,
+    ):
         """Update the distance metric with new data.
 
         Parameters
@@ -198,7 +212,9 @@ class NearestNeighborDistanceMetric:
         for appe_feature, loca_feature, pose_feature, uv_map, target in zip(
             appe_features, loca_features, pose_features, uv_maps, targets
         ):
-            self.samples.setdefault(target, []).append([appe_feature, loca_feature, pose_feature, uv_map])
+            self.samples.setdefault(target, []).append(
+                [appe_feature, loca_feature, pose_feature, uv_map]
+            )
             if self.budget is not None:
                 self.samples[target] = self.samples[target][-self.budget :]
 
@@ -230,7 +246,7 @@ class NearestNeighborDistanceMetric:
                 self.prediction_features,
                 self.distance_type,
                 self.shot,
-                self.HMAR,
+                self.hmar,
             )
 
         return cost_matrix_a

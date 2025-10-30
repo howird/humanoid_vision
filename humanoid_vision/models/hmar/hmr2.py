@@ -1,28 +1,37 @@
 from dataclasses import asdict
-import torch
-import numpy as np
 
-from humanoid_vision.models.hmar.hmr import HMR2018Predictor
+import torch
+
+import numpy as np
+import torch.nn as nn
+
 from humanoid_vision.utils.pylogger_phalp import get_pylogger
-from humanoid_vision.configs.base import CACHE_DIR, BaseConfig
+from humanoid_vision.configs.base import CACHE_DIR, PhalpConfig
 from humanoid_vision.common.hmr_output import HMROutput
 from humanoid_vision.common.hmar_output import HMAROutput
 
 from humanoid_vision.models import download_models
 from humanoid_vision.models.hmr2 import HMR2
+from humanoid_vision.models.hmar.hmar import HMAR
 
 log = get_pylogger(__name__)
 
 
-class HMR2023TextureSampler(HMR2018Predictor):
+class HMR2023TextureSampler(nn.Module):
     """HMR2023 model with texture sampling capabilities."""
 
-    def __init__(self, cfg: BaseConfig) -> None:
-        super().__init__(cfg)
+    def __init__(self, cfg: PhalpConfig) -> None:
+        super().__init__()
+
+        # Old HMAR stuff
+        self.hmar = HMAR(cfg)
+        self.hmar.load_weights(cfg.hmr.hmar_path)
+
         download_models()
 
         self.model = HMR2.load_from_checkpoint(
-            CACHE_DIR / "4DHumans/logs/train/multiruns/hmr2/0/checkpoints/epoch=35-step=1000000.ckpt",
+            CACHE_DIR
+            / "4DHumans/logs/train/multiruns/hmr2/0/checkpoints/epoch=35-step=1000000.ckpt",
             strict=False,
             cfg=cfg,
         )
@@ -80,8 +89,12 @@ class HMR2023TextureSampler(HMR2018Predictor):
 
         pred_verts = model_out.pred_vertices + model_out.pred_cam_t.unsqueeze(1)
         device = pred_verts.device
-        face_tensor = torch.tensor(self.smpl.faces.astype(np.int64), dtype=torch.long, device=device)
-        map_verts, valid_mask = unproject_uvmap_to_mesh(self.tex_bmap, self.tex_fmap, pred_verts, face_tensor)  # B,N,3
+        face_tensor = torch.tensor(
+            self.smpl.faces.astype(np.int64), dtype=torch.long, device=device
+        )
+        map_verts, valid_mask = unproject_uvmap_to_mesh(
+            self.tex_bmap, self.tex_fmap, pred_verts, face_tensor
+        )  # B,N,3
 
         # Project map_verts to image using K,R,t
         # map_verts_view = einsum('bij,bnj->bni', R, map_verts) # R=I t=0
@@ -92,7 +105,9 @@ class HMR2023TextureSampler(HMR2018Predictor):
         # Render Depth. Annoying but we need to create this
         K = torch.eye(3, device=device)
         K[0, 0] = K[1, 1] = self.focal_length
-        K[1, 2] = K[0, 2] = self.img_size / 2  # Because the neural renderer only support squared images
+        K[1, 2] = K[0, 2] = (
+            self.img_size / 2
+        )  # Because the neural renderer only support squared images
         K = K.unsqueeze(0)
         R = torch.eye(3, device=device).unsqueeze(0)
         t = torch.zeros(3, device=device).unsqueeze(0)
@@ -111,36 +126,25 @@ class HMR2023TextureSampler(HMR2018Predictor):
         )  # B,1,1,N
         rend_depth_at_proj = rend_depth_at_proj.squeeze(1).squeeze(1)  # B,N
 
-        img_rgba = torch.cat([batch["img"], batch["mask"][:, None, :, :]], dim=1)  # B,4,H,W
-        img_rgba_at_proj = torch.nn.functional.grid_sample(img_rgba, map_verts_proj[:, None, :, :])  # B,4,1,N
+        img_rgba = torch.cat(
+            [batch["img"], batch["mask"][:, None, :, :]], dim=1
+        )  # B,4,H,W
+        img_rgba_at_proj = torch.nn.functional.grid_sample(
+            img_rgba, map_verts_proj[:, None, :, :]
+        )  # B,4,1,N
         img_rgba_at_proj = img_rgba_at_proj.squeeze(2)  # B,4,N
 
         visibility_mask = map_verts_depth <= (rend_depth_at_proj + 1e-4)  # B,N
         img_rgba_at_proj[:, 3, :][~visibility_mask] = 0
 
         # Paste image back onto square uv_image
-        uv_image = torch.zeros((batch["img"].shape[0], 4, 256, 256), dtype=torch.float, device=device)
+        uv_image = torch.zeros(
+            (batch["img"].shape[0], 4, 256, 256), dtype=torch.float, device=device
+        )
         uv_image[:, :, valid_mask] = img_rgba_at_proj
 
-        return HMAROutput(uv_image=uv_image, uv_vector=self.hmar_old.process_uv_image(uv_image), **asdict(model_out))
-
-    def get_uv_distance(self, t_uv, d_uv):
-        t_uv = torch.from_numpy(t_uv).cuda().float()
-        d_uv = torch.from_numpy(d_uv).cuda().float()
-        d_mask = d_uv[3:, :, :] > 0.5
-        t_mask = t_uv[3:, :, :] > 0.5
-
-        mask_dt = torch.logical_and(d_mask, t_mask)
-        mask_dt = mask_dt.repeat(4, 1, 1)
-        mask_ = torch.logical_not(mask_dt)
-
-        t_uv[mask_] = 0.0
-        d_uv[mask_] = 0.0
-
-        with torch.no_grad():
-            t_emb = self.autoencoder_hmar(t_uv.unsqueeze(0), en=True)
-            d_emb = self.autoencoder_hmar(d_uv.unsqueeze(0), en=True)
-
-        t_emb = t_emb.view(-1) / 10**3
-        d_emb = d_emb.view(-1) / 10**3
-        return t_emb.cpu().numpy(), d_emb.cpu().numpy(), torch.sum(mask_dt).cpu().numpy() / 4 / 256 / 256 / 2
+        return HMAROutput(
+            uv_image=uv_image,
+            uv_vector=self.hmar.process_uv_image(uv_image),
+            **asdict(model_out),
+        )

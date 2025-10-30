@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from humanoid_vision.configs.base import BaseConfig
+from humanoid_vision.configs.base import PhalpConfig
 from humanoid_vision.models.backbones.resnet import resnet
 from humanoid_vision.models.heads.apperence_head import TextureHead
 from humanoid_vision.models.heads.encoding_head import EncodingHead
@@ -12,7 +12,7 @@ from humanoid_vision.utils.utils import compute_uvsampler, perspective_projectio
 
 
 class HMAR(nn.Module):
-    def __init__(self, cfg: BaseConfig):
+    def __init__(self, cfg: PhalpConfig):
         super(HMAR, self).__init__()
 
         self.cfg = cfg
@@ -32,19 +32,30 @@ class HMAR(nn.Module):
         self.F = uv_sampler.size(1)
         self.T = uv_sampler.size(2)
         self.uv_sampler = uv_sampler.view(-1, self.F, self.T * self.T, 2)
-        self.backbone = resnet(pretrained=True, num_layers=self.cfg.MODEL.BACKBONE.NUM_LAYERS, cfg=self.cfg)
-        self.texture_head = TextureHead(self.uv_sampler, self.cfg, img_H=img_H, img_W=img_W)
+        self.backbone = resnet(
+            pretrained=True, num_layers=self.cfg.MODEL.BACKBONE.NUM_LAYERS, cfg=self.cfg
+        )
+        self.texture_head = TextureHead(
+            self.uv_sampler, self.cfg, img_H=img_H, img_W=img_W
+        )
         self.encoding_head = EncodingHead(cfg=self.cfg, img_H=img_H, img_W=img_W)
 
         self.smpl = SMPL(cfg.SMPL)
 
-        self.smpl_head = SMPLHead(cfg, input_dim=cfg.MODEL.SMPL_HEAD.IN_CHANNELS, pool="pooled")
+        self.smpl_head = SMPLHead(
+            cfg, input_dim=cfg.MODEL.SMPL_HEAD.IN_CHANNELS, pool="pooled"
+        )
 
     def load_weights(self, path):
         checkpoint_file = torch.load(path)
         state_dict_filt = {}
         for k, v in checkpoint_file["model"].items():
-            if "encoding_head" in k or "texture_head" in k or "backbone" in k or "smplx_head" in k:
+            if (
+                "encoding_head" in k
+                or "texture_head" in k
+                or "backbone" in k
+                or "smplx_head" in k
+            ):
                 state_dict_filt.setdefault(k[5:].replace("smplx", "smpl"), v)
         self.load_state_dict(state_dict_filt, strict=False)
 
@@ -60,7 +71,9 @@ class HMAR(nn.Module):
 
         out = {
             "uv_image": uv_image,  # raw uv_image
-            "uv_vector": self.process_uv_image(uv_image),  # preprocessed uv_image for the autoencoder
+            "uv_vector": self.process_uv_image(
+                uv_image
+            ),  # preprocessed uv_image for the autoencoder
             "flow": flow,
             "pose_emb": pose_embeddings,
             "pose_smpl": pred_smpl_params,
@@ -112,7 +125,9 @@ class HMAR(nn.Module):
         batch_size = pred_cam.shape[0]
         dtype = pred_cam.dtype
         device = pred_cam.device
-        focal_length = self.cfg.EXTRA.FOCAL_LENGTH * torch.ones(batch_size, 2, device=device, dtype=dtype)
+        focal_length = self.cfg.EXTRA.FOCAL_LENGTH * torch.ones(
+            batch_size, 2, device=device, dtype=dtype
+        )
 
         pred_cam_t = torch.stack(
             [
@@ -120,12 +135,18 @@ class HMAR(nn.Module):
                 pred_cam[:, 2],
                 2
                 * focal_length[:, 0]
-                / (pred_cam[:, 0] * torch.tensor(scale[:, 0], dtype=dtype, device=device) + 1e-9),
+                / (
+                    pred_cam[:, 0]
+                    * torch.tensor(scale[:, 0], dtype=dtype, device=device)
+                    + 1e-9
+                ),
             ],
             dim=1,
         )
         pred_cam_t[:, :2] += (
-            torch.tensor(center - img_size / 2.0, dtype=dtype, device=device) * pred_cam_t[:, [2]] / focal_length
+            torch.tensor(center - img_size / 2.0, dtype=dtype, device=device)
+            * pred_cam_t[:, [2]]
+            / focal_length
         )
 
         zeros_ = torch.zeros(batch_size, 1, 3).to(device)
@@ -148,3 +169,28 @@ class HMAR(nn.Module):
         pred_keypoints_2d_smpl = (pred_keypoints_2d_smpl + 0.5) * img_size
 
         return pred_keypoints_2d_smpl, pred_joints, pred_cam_t
+
+    def get_uv_distance(self, t_uv, d_uv):
+        t_uv = torch.from_numpy(t_uv).cuda().float()
+        d_uv = torch.from_numpy(d_uv).cuda().float()
+        d_mask = d_uv[3:, :, :] > 0.5
+        t_mask = t_uv[3:, :, :] > 0.5
+
+        mask_dt = torch.logical_and(d_mask, t_mask)
+        mask_dt = mask_dt.repeat(4, 1, 1)
+        mask_ = torch.logical_not(mask_dt)
+
+        t_uv[mask_] = 0.0
+        d_uv[mask_] = 0.0
+
+        with torch.no_grad():
+            t_emb = self.autoencoder_hmar(t_uv.unsqueeze(0), en=True)
+            d_emb = self.autoencoder_hmar(d_uv.unsqueeze(0), en=True)
+
+        t_emb = t_emb.view(-1) / 10**3
+        d_emb = d_emb.view(-1) / 10**3
+        return (
+            t_emb.cpu().numpy(),
+            d_emb.cpu().numpy(),
+            torch.sum(mask_dt).cpu().numpy() / 4 / 256 / 256 / 2,
+        )

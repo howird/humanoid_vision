@@ -143,7 +143,9 @@ class SMPLHeadConfig:
     TRANSFORMER_INPUT: Literal["zero", "mean_shape"] = "zero"
     INIT_DECODER_XAVIER: bool = False
     IEF_ITERS: int = 1
-    TRANSFORMER_DECODER: TransformerDecoderConfig = field(default_factory=TransformerDecoderConfig)
+    TRANSFORMER_DECODER: TransformerDecoderConfig = field(
+        default_factory=TransformerDecoderConfig
+    )
 
 
 @dataclass
@@ -173,7 +175,7 @@ class ExtraConfig:
 
 
 @dataclass
-class BaseConfig:
+class PhalpConfig:
     """Base configuration for PHALP tracking system."""
 
     seed: int = 42
@@ -214,10 +216,18 @@ class DatasetTrainConfig:
 
     H36M_TRAIN_WMASK: Dict[str, float] = field(default_factory=lambda: {"WEIGHT": 0.1})
     MPII_TRAIN_WMASK: Dict[str, float] = field(default_factory=lambda: {"WEIGHT": 0.1})
-    COCO_TRAIN_2014_WMASK_PRUNED: Dict[str, float] = field(default_factory=lambda: {"WEIGHT": 0.1})
-    COCO_TRAIN_2014_VITPOSE_REPLICATE_PRUNED12: Dict[str, float] = field(default_factory=lambda: {"WEIGHT": 0.1})
-    MPI_INF_TRAIN_PRUNED: Dict[str, float] = field(default_factory=lambda: {"WEIGHT": 0.02})
-    AVA_TRAIN_MIDFRAMES_1FPS_WMASK: Dict[str, float] = field(default_factory=lambda: {"WEIGHT": 0.19})
+    COCO_TRAIN_2014_WMASK_PRUNED: Dict[str, float] = field(
+        default_factory=lambda: {"WEIGHT": 0.1}
+    )
+    COCO_TRAIN_2014_VITPOSE_REPLICATE_PRUNED12: Dict[str, float] = field(
+        default_factory=lambda: {"WEIGHT": 0.1}
+    )
+    MPI_INF_TRAIN_PRUNED: Dict[str, float] = field(
+        default_factory=lambda: {"WEIGHT": 0.02}
+    )
+    AVA_TRAIN_MIDFRAMES_1FPS_WMASK: Dict[str, float] = field(
+        default_factory=lambda: {"WEIGHT": 0.19}
+    )
     AIC_TRAIN_WMASK: Dict[str, float] = field(default_factory=lambda: {"WEIGHT": 0.19})
     INSTA_TRAIN_WMASK: Dict[str, float] = field(default_factory=lambda: {"WEIGHT": 0.2})
 
@@ -335,7 +345,7 @@ class TrainingConfig:
 
 
 @dataclass
-class TrainConfig(BaseConfig):
+class TrainConfig(PhalpConfig):
     """Configuration for training the model."""
 
     task_name: str = "train"

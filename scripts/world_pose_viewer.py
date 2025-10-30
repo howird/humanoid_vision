@@ -1,8 +1,6 @@
-import argparse
-from pathlib import Path
-
 import numpy as np
 import cv2
+from pathlib import Path
 import torch
 import tqdm
 
@@ -16,9 +14,8 @@ from aitviewer.scene.camera import OpenCVCamera
 from aitviewer.scene.node import Node
 
 # Importing local modules
-from world_pose_viewer.pitch import SoccerPitch
-from world_pose_viewer.utils import project_points
-
+from lib.pitch import SoccerPitch
+from lib.utils import project_points
 
 PITCH = SoccerPitch()
 SOCCER_FIELD_LINES = PITCH.lines
@@ -140,7 +137,9 @@ def make_post_fk_func(camera_params):
     return _post_fk_func
 
 
-def main():
+if __name__ == "__main__":
+    import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--sequence", type=str, default="ARG_FRA_182345")
     args = parser.parse_args()
@@ -200,7 +199,3 @@ def main():
     viewer.scene.floor.enabled = False
     viewer.set_temp_camera(camera)
     viewer.run()
-
-
-if __name__ == "__main__":
-    main()

@@ -1,10 +1,8 @@
 import torch
 import pytorch_lightning as pl
 
-from dataclasses import asdict
 from typing import Dict, Tuple
 
-from torch.optim import lr_scheduler
 from smplx.utils import ModelOutput
 from yacs.config import CfgNode
 
@@ -40,9 +38,13 @@ class HMR2(pl.LightningModule):
         # Create backbone feature extractor
         self.backbone = vit(cfg)
         if cfg.MODEL.BACKBONE.PRETRAINED_WEIGHTS:
-            log.info(f"Loading backbone weights from {cfg.MODEL.BACKBONE.PRETRAINED_WEIGHTS}")
+            log.info(
+                f"Loading backbone weights from {cfg.MODEL.BACKBONE.PRETRAINED_WEIGHTS}"
+            )
             self.backbone.load_state_dict(
-                torch.load(cfg.MODEL.BACKBONE.PRETRAINED_WEIGHTS, map_location="cpu")["state_dict"]
+                torch.load(cfg.MODEL.BACKBONE.PRETRAINED_WEIGHTS, map_location="cpu")[
+                    "state_dict"
+                ]
             )
 
         # Create SMPL head
@@ -76,13 +78,20 @@ class HMR2(pl.LightningModule):
         all_params += list(self.backbone.parameters())
         return all_params
 
-    def configure_optimizers(self) -> Tuple[torch.optim.Optimizer, torch.optim.Optimizer]:
+    def configure_optimizers(
+        self,
+    ) -> Tuple[torch.optim.Optimizer, torch.optim.Optimizer]:
         """
         Setup model and distriminator Optimizers
         Returns:
             Tuple[torch.optim.Optimizer, torch.optim.Optimizer]: Model and discriminator optimizers
         """
-        param_groups = [{"params": filter(lambda p: p.requires_grad, self.get_parameters()), "lr": self.cfg.TRAIN.LR}]
+        param_groups = [
+            {
+                "params": filter(lambda p: p.requires_grad, self.get_parameters()),
+                "lr": self.cfg.TRAIN.LR,
+            }
+        ]
 
         optimizer = torch.optim.AdamW(
             params=param_groups,
@@ -90,7 +99,9 @@ class HMR2(pl.LightningModule):
             weight_decay=self.cfg.TRAIN.WEIGHT_DECAY,
         )
         optimizer_disc = torch.optim.AdamW(
-            params=self.discriminator.parameters(), lr=self.cfg.TRAIN.LR, weight_decay=self.cfg.TRAIN.WEIGHT_DECAY
+            params=self.discriminator.parameters(),
+            lr=self.cfg.TRAIN.LR,
+            weight_decay=self.cfg.TRAIN.WEIGHT_DECAY,
         )
 
         return optimizer, optimizer_disc
@@ -113,7 +124,9 @@ class HMR2(pl.LightningModule):
 
         # Compute conditioning features using the backbone
         # if using ViT backbone, we need to use a different aspect ratio
-        conditioning_feats = self.backbone(x[:, :, :, 32:-32])  # (BS, 3, 256, 192) -> (BS, 1280, 16, 12)
+        conditioning_feats = self.backbone(
+            x[:, :, :, 32:-32]
+        )  # (BS, 3, 256, 192) -> (BS, 1280, 16, 12)
 
         pred_smpl_params: HMRSMPLOutput
         pred_smpl_params, pred_cam, _ = self.smpl_head(conditioning_feats)
@@ -121,12 +134,16 @@ class HMR2(pl.LightningModule):
         # Compute camera translation
         device = pred_smpl_params.body_pose.device
         dtype = pred_smpl_params.body_pose.dtype
-        focal_length = self.cfg.EXTRA.FOCAL_LENGTH * torch.ones(batch_size, 2, device=device, dtype=dtype)
+        focal_length = self.cfg.EXTRA.FOCAL_LENGTH * torch.ones(
+            batch_size, 2, device=device, dtype=dtype
+        )
         pred_cam_t = torch.stack(
             [
                 pred_cam[:, 1],
                 pred_cam[:, 2],
-                2 * focal_length[:, 0] / (self.cfg.MODEL.IMAGE_SIZE * pred_cam[:, 0] + 1e-9),
+                2
+                * focal_length[:, 0]
+                / (self.cfg.MODEL.IMAGE_SIZE * pred_cam[:, 0] + 1e-9),
             ],
             dim=-1,
         )
@@ -142,7 +159,9 @@ class HMR2(pl.LightningModule):
         pred_cam_t = pred_cam_t.reshape(-1, 3)
         focal_length = focal_length.reshape(-1, 2)
         pred_keypoints_2d = perspective_projection(
-            pred_keypoints_3d, translation=pred_cam_t, focal_length=focal_length / self.cfg.MODEL.IMAGE_SIZE
+            pred_keypoints_3d,
+            translation=pred_cam_t,
+            focal_length=focal_length / self.cfg.MODEL.IMAGE_SIZE,
         )
 
         return HMROutput(
@@ -157,7 +176,9 @@ class HMR2(pl.LightningModule):
             pred_vertices=pred_vertices,
         )
 
-    def compute_loss(self, batch: Dict, output: HMROutput, train: bool = True) -> torch.Tensor:
+    def compute_loss(
+        self, batch: Dict, output: HMROutput, train: bool = True
+    ) -> torch.Tensor:
         """
         Compute losses given the input batch and the regression output
         Args:
@@ -190,7 +211,9 @@ class HMR2(pl.LightningModule):
 
         # Compute 3D keypoint loss
         loss_keypoints_2d = self.keypoint_2d_loss(pred_keypoints_2d, gt_keypoints_2d)
-        loss_keypoints_3d = self.keypoint_3d_loss(pred_keypoints_3d, gt_keypoints_3d, pelvis_id=25 + 14)
+        loss_keypoints_3d = self.keypoint_3d_loss(
+            pred_keypoints_3d, gt_keypoints_3d, pelvis_id=25 + 14
+        )
 
         # Compute loss on SMPL parameters
         loss_smpl_params = {}
@@ -210,7 +233,12 @@ class HMR2(pl.LightningModule):
         loss = (
             self.cfg.LOSS_WEIGHTS["KEYPOINTS_3D"] * loss_keypoints_3d
             + self.cfg.LOSS_WEIGHTS["KEYPOINTS_2D"] * loss_keypoints_2d
-            + sum([loss_smpl_params[k] * self.cfg.LOSS_WEIGHTS[k.upper()] for k in loss_smpl_params])
+            + sum(
+                [
+                    loss_smpl_params[k] * self.cfg.LOSS_WEIGHTS[k.upper()]
+                    for k in loss_smpl_params
+                ]
+            )
         )
 
         losses = dict(
@@ -229,7 +257,12 @@ class HMR2(pl.LightningModule):
     # Tensoroboard logging should run from first rank only
     @pl.utilities.rank_zero.rank_zero_only
     def tensorboard_logging(
-        self, batch: Dict, output: HMROutput, step_count: int, train: bool = True, write_to_summary_writer: bool = True
+        self,
+        batch: Dict,
+        output: HMROutput,
+        step_count: int,
+        train: bool = True,
+        write_to_summary_writer: bool = True,
     ) -> None:
         """
         Log results to Tensorboard
@@ -246,8 +279,12 @@ class HMR2(pl.LightningModule):
         mode = "train" if train else "val"
         batch_size = batch["keypoints_2d"].shape[0]
         images = batch["img"]
-        images = images * torch.tensor([0.229, 0.224, 0.225], device=images.device).reshape(1, 3, 1, 1)
-        images = images + torch.tensor([0.485, 0.456, 0.406], device=images.device).reshape(1, 3, 1, 1)
+        images = images * torch.tensor(
+            [0.229, 0.224, 0.225], device=images.device
+        ).reshape(1, 3, 1, 1)
+        images = images + torch.tensor(
+            [0.485, 0.456, 0.406], device=images.device
+        ).reshape(1, 3, 1, 1)
 
         pred_keypoints_3d = output.pred_keypoints_3d.detach().reshape(batch_size, -1, 3)
         pred_vertices = output.pred_vertices.detach().reshape(batch_size, -1, 3)
@@ -261,7 +298,9 @@ class HMR2(pl.LightningModule):
         if write_to_summary_writer:
             summary_writer = self.logger.experiment
             for loss_name, val in losses.items():
-                summary_writer.add_scalar(mode + "/" + loss_name, val.detach().item(), step_count)
+                summary_writer.add_scalar(
+                    mode + "/" + loss_name, val.detach().item(), step_count
+                )
         num_images = min(batch_size, self.cfg.EXTRA.NUM_LOG_IMAGES)
 
         gt_keypoints_3d = batch["keypoints_3d"]
@@ -293,7 +332,11 @@ class HMR2(pl.LightningModule):
         return self.forward_step(batch, train=False)
 
     def training_step_discriminator(
-        self, batch: Dict, body_pose: torch.Tensor, betas: torch.Tensor, optimizer: torch.optim.Optimizer
+        self,
+        batch: Dict,
+        body_pose: torch.Tensor,
+        betas: torch.Tensor,
+        optimizer: torch.optim.Optimizer,
     ) -> torch.Tensor:
         """
         Run a discriminator training step
@@ -351,7 +394,8 @@ class HMR2(pl.LightningModule):
         loss = self.compute_loss(batch, output, train=True)
         if self.cfg.LOSS_WEIGHTS.ADVERSARIAL > 0:
             disc_out = self.discriminator(
-                output.body_pose.reshape(batch_size, -1), output.betas.reshape(batch_size, -1)
+                output.body_pose.reshape(batch_size, -1),
+                output.betas.reshape(batch_size, -1),
             )
             loss_adv = ((disc_out - 1.0) ** 2).sum() / batch_size
             loss = loss + self.cfg.LOSS_WEIGHTS.ADVERSARIAL * loss_adv
@@ -365,9 +409,18 @@ class HMR2(pl.LightningModule):
         # Clip gradient
         if self.cfg.TRAIN.get("GRAD_CLIP_VAL", 0) > 0:
             gn = torch.nn.utils.clip_grad_norm_(
-                self.get_parameters(), self.cfg.TRAIN.GRAD_CLIP_VAL, error_if_nonfinite=True
+                self.get_parameters(),
+                self.cfg.TRAIN.GRAD_CLIP_VAL,
+                error_if_nonfinite=True,
             )
-            self.log("train/grad_norm", gn, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+            self.log(
+                "train/grad_norm",
+                gn,
+                on_step=True,
+                on_epoch=True,
+                prog_bar=True,
+                logger=True,
+            )
         optimizer.step()
         if self.cfg.LOSS_WEIGHTS.ADVERSARIAL > 0:
             loss_disc = self.training_step_discriminator(
@@ -382,11 +435,20 @@ class HMR2(pl.LightningModule):
         if self.global_step > 0 and self.global_step % self.cfg.GENERAL.LOG_STEPS == 0:
             self.tensorboard_logging(batch, output, self.global_step, train=True)
 
-        self.log("train/loss", output.losses["loss"], on_step=True, on_epoch=True, prog_bar=True, logger=False)
+        self.log(
+            "train/loss",
+            output.losses["loss"],
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            logger=False,
+        )
 
         return output
 
-    def validation_step(self, batch: Dict, batch_idx: int, dataloader_idx=0) -> HMROutput:
+    def validation_step(
+        self, batch: Dict, batch_idx: int, dataloader_idx=0
+    ) -> HMROutput:
         """
         Run a validation step and log to Tensorboard
         Args:

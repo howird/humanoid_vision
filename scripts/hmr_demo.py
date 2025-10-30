@@ -5,12 +5,14 @@ import os
 import cv2
 import numpy as np
 
-from puffer_phc.config import DebugConfig
-
 from humanoid_vision.configs import CACHE_DIR_4DHUMANS
 from humanoid_vision.models import HMR2, download_models, load_hmr2, DEFAULT_CHECKPOINT
 from humanoid_vision.utils.misc import recursive_to
-from humanoid_vision.datasets.vitdet_dataset import ViTDetDataset, DEFAULT_MEAN, DEFAULT_STD
+from humanoid_vision.datasets.vitdet_dataset import (
+    ViTDetDataset,
+    DEFAULT_MEAN,
+    DEFAULT_STD,
+)
 from humanoid_vision.utils.renderer import Renderer, cam_crop_to_full
 
 LIGHT_BLUE = (0.65098039, 0.74117647, 0.85882353)
@@ -19,20 +21,39 @@ LIGHT_BLUE = (0.65098039, 0.74117647, 0.85882353)
 def main():
     import time
 
-    DebugConfig(enable=True)()
-
     start = time.time()
     parser = argparse.ArgumentParser(description="HMR2 demo code")
     parser.add_argument(
-        "--checkpoint", type=str, default=DEFAULT_CHECKPOINT, help="Path to pretrained model checkpoint"
-    )
-    parser.add_argument("--img_folder", type=str, default="example_data/images", help="Folder with input images")
-    parser.add_argument("--out_folder", type=str, default="demo_out", help="Output folder to save rendered results")
-    parser.add_argument(
-        "--side_view", dest="side_view", action="store_true", default=False, help="If set, render side view also"
+        "--checkpoint",
+        type=str,
+        default=DEFAULT_CHECKPOINT,
+        help="Path to pretrained model checkpoint",
     )
     parser.add_argument(
-        "--top_view", dest="top_view", action="store_true", default=False, help="If set, render top view also"
+        "--img_folder",
+        type=str,
+        default="example_data/images",
+        help="Folder with input images",
+    )
+    parser.add_argument(
+        "--out_folder",
+        type=str,
+        default="demo_out",
+        help="Output folder to save rendered results",
+    )
+    parser.add_argument(
+        "--side_view",
+        dest="side_view",
+        action="store_true",
+        default=False,
+        help="If set, render side view also",
+    )
+    parser.add_argument(
+        "--top_view",
+        dest="top_view",
+        action="store_true",
+        default=False,
+        help="If set, render top view also",
     )
     parser.add_argument(
         "--full_frame",
@@ -42,14 +63,27 @@ def main():
         help="If set, render all people together also",
     )
     parser.add_argument(
-        "--save_mesh", dest="save_mesh", action="store_true", default=False, help="If set, save meshes to disk also"
+        "--save_mesh",
+        dest="save_mesh",
+        action="store_true",
+        default=False,
+        help="If set, save meshes to disk also",
     )
     parser.add_argument(
-        "--detector", type=str, default="vitdet", choices=["vitdet", "regnety"], help="Using regnety improves runtime"
+        "--detector",
+        type=str,
+        default="vitdet",
+        choices=["vitdet", "regnety"],
+        help="Using regnety improves runtime",
     )
-    parser.add_argument("--batch_size", type=int, default=1, help="Batch size for inference/fitting")
     parser.add_argument(
-        "--file_type", nargs="+", default=["*.jpg", "*.png"], help="List of file extensions to consider"
+        "--batch_size", type=int, default=1, help="Batch size for inference/fitting"
+    )
+    parser.add_argument(
+        "--file_type",
+        nargs="+",
+        default=["*.jpg", "*.png"],
+        help="List of file extensions to consider",
     )
 
     args = parser.parse_args()
@@ -70,7 +104,11 @@ def main():
         from detectron2.config import LazyConfig
         import humanoid_vision
 
-        cfg_path = Path(hmr2.__file__).parent / "configs" / "cascade_mask_rcnn_vitdet_h_75ep.py"
+        cfg_path = (
+            Path(hmr2.__file__).parent
+            / "configs"
+            / "cascade_mask_rcnn_vitdet_h_75ep.py"
+        )
         detectron2_cfg = LazyConfig.load(str(cfg_path))
         detectron2_cfg.train.init_checkpoint = "https://dl.fbaipublicfiles.com/detectron2/ViTDet/COCO/cascade_mask_rcnn_vitdet_h/f328730692/model_final_f05665.pkl"
         for i in range(3):
@@ -80,7 +118,9 @@ def main():
         from detectron2 import model_zoo
         from detectron2.config import get_cfg
 
-        detectron2_cfg = model_zoo.get_config("new_baselines/mask_rcnn_regnety_4gf_dds_FPN_400ep_LSJ.py", trained=True)
+        detectron2_cfg = model_zoo.get_config(
+            "new_baselines/mask_rcnn_regnety_4gf_dds_FPN_400ep_LSJ.py", trained=True
+        )
         detectron2_cfg.model.roi_heads.box_predictor.test_score_thresh = 0.5
         detectron2_cfg.model.roi_heads.box_predictor.test_nms_thresh = 0.4
         detector = DefaultPredictor_Lazy(detectron2_cfg)
@@ -92,7 +132,9 @@ def main():
     os.makedirs(args.out_folder, exist_ok=True)
 
     # Get all demo images that end with .jpg or .png
-    img_paths = [img for end in args.file_type for img in Path(args.img_folder).glob(end)]
+    img_paths = [
+        img for end in args.file_type for img in Path(args.img_folder).glob(end)
+    ]
 
     # Iterate over all images in folder
     for img_path in img_paths:
@@ -107,7 +149,9 @@ def main():
 
         # Run HMR2.0 on all detected humans
         dataset = ViTDetDataset(model_cfg, img_cv2, boxes)
-        dataloader = torch.utils.data.DataLoader(dataset, batch_size=8, shuffle=False, num_workers=0)
+        dataloader = torch.utils.data.DataLoader(
+            dataset, batch_size=8, shuffle=False, num_workers=0
+        )
 
         all_verts = []
         all_cam_t = []
@@ -121,9 +165,18 @@ def main():
             box_center = batch["box_center"].float()
             box_size = batch["box_size"].float()
             img_size = batch["img_size"].float()
-            scaled_focal_length = model_cfg.EXTRA.FOCAL_LENGTH / model_cfg.MODEL.IMAGE_SIZE * img_size.max()
+            scaled_focal_length = (
+                model_cfg.EXTRA.FOCAL_LENGTH
+                / model_cfg.MODEL.IMAGE_SIZE
+                * img_size.max()
+            )
             pred_cam_t_full = (
-                cam_crop_to_full(pred_cam, box_center, box_size, img_size, scaled_focal_length).detach().cpu().numpy()
+                cam_crop_to_full(
+                    pred_cam, box_center, box_size, img_size, scaled_focal_length
+                )
+                .detach()
+                .cpu()
+                .numpy()
             )
 
             # Render the result
@@ -132,8 +185,12 @@ def main():
                 # Get filename from path img_path
                 img_fn, _ = os.path.splitext(os.path.basename(img_path))
                 person_id = int(batch["personid"][n])
-                white_img = (torch.ones_like(batch["img"][n]).cpu() - DEFAULT_MEAN / 255) / (DEFAULT_STD / 255)
-                input_patch = batch["img"][n].cpu() * (DEFAULT_STD / 255) + (DEFAULT_MEAN / 255)
+                white_img = (
+                    torch.ones_like(batch["img"][n]).cpu() - DEFAULT_MEAN / 255
+                ) / (DEFAULT_STD / 255)
+                input_patch = batch["img"][n].cpu() * (DEFAULT_STD / 255) + (
+                    DEFAULT_MEAN / 255
+                )
                 input_patch = input_patch.permute(1, 2, 0).numpy()
 
                 regression_img = renderer(
@@ -168,7 +225,10 @@ def main():
                     )
                     final_img = np.concatenate([final_img, top_img], axis=1)
 
-                cv2.imwrite(os.path.join(args.out_folder, f"{img_fn}_{person_id}.png"), 255 * final_img[:, :, ::-1])
+                cv2.imwrite(
+                    os.path.join(args.out_folder, f"{img_fn}_{person_id}.png"),
+                    255 * final_img[:, :, ::-1],
+                )
 
                 # Add all verts and cams to list
                 verts = out["pred_vertices"][n].detach().cpu().numpy()
@@ -179,8 +239,12 @@ def main():
                 # Save all meshes to disk
                 if args.save_mesh:
                     camera_translation = cam_t.copy()
-                    tmesh = renderer.vertices_to_trimesh(verts, camera_translation, LIGHT_BLUE)
-                    tmesh.export(os.path.join(args.out_folder, f"{img_fn}_{person_id}.obj"))
+                    tmesh = renderer.vertices_to_trimesh(
+                        verts, camera_translation, LIGHT_BLUE
+                    )
+                    tmesh.export(
+                        os.path.join(args.out_folder, f"{img_fn}_{person_id}.obj")
+                    )
 
         # Render front view
         if args.full_frame and len(all_verts) > 0:
@@ -189,14 +253,24 @@ def main():
                 scene_bg_color=(1, 1, 1),
                 focal_length=scaled_focal_length,
             )
-            cam_view = renderer.render_rgba_multiple(all_verts, cam_t=all_cam_t, render_res=img_size[n], **misc_args)
+            cam_view = renderer.render_rgba_multiple(
+                all_verts, cam_t=all_cam_t, render_res=img_size[n], **misc_args
+            )
 
             # Overlay image
             input_img = img_cv2.astype(np.float32)[:, :, ::-1] / 255.0
-            input_img = np.concatenate([input_img, np.ones_like(input_img[:, :, :1])], axis=2)  # Add alpha channel
-            input_img_overlay = input_img[:, :, :3] * (1 - cam_view[:, :, 3:]) + cam_view[:, :, :3] * cam_view[:, :, 3:]
+            input_img = np.concatenate(
+                [input_img, np.ones_like(input_img[:, :, :1])], axis=2
+            )  # Add alpha channel
+            input_img_overlay = (
+                input_img[:, :, :3] * (1 - cam_view[:, :, 3:])
+                + cam_view[:, :, :3] * cam_view[:, :, 3:]
+            )
 
-            cv2.imwrite(os.path.join(args.out_folder, f"{img_fn}_all.png"), 255 * input_img_overlay[:, :, ::-1])
+            cv2.imwrite(
+                os.path.join(args.out_folder, f"{img_fn}_all.png"),
+                255 * input_img_overlay[:, :, ::-1],
+            )
 
         end = time.time()
         print(end - start)

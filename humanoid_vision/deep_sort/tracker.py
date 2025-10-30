@@ -10,11 +10,14 @@ import numpy as np
 
 from humanoid_vision.common.track import Track
 from humanoid_vision.common.detection import Detection
-from humanoid_vision.configs.base import BaseConfig
+from humanoid_vision.configs.base import PhalpConfig
 from humanoid_vision.deep_sort.nn_matching import NearestNeighborDistanceMetric
 from humanoid_vision.deep_sort.linear_assignment import matching_simple
-from humanoid_vision.deep_sort.forward_prediction import predict_future_location, predict_future_pose
-from humanoid_vision.models.hmar.hmr2 import HMR2023TextureSampler
+from humanoid_vision.deep_sort.forward_prediction import (
+    predict_future_location,
+    predict_future_pose,
+)
+from humanoid_vision.models.hmar.hmar import HMAR
 from humanoid_vision.models.predictors.pose_transformer_v2 import PoseTransformerV2
 
 np.set_printoptions(formatter={"float": "{: 0.3f}".format})
@@ -52,8 +55,8 @@ class Tracker:
 
     def __init__(
         self,
-        cfg: BaseConfig,
-        hmr_model: HMR2023TextureSampler,
+        cfg: PhalpConfig,
+        hmar: HMAR,
         pose_predictor: PoseTransformerV2,
         max_age=30,
         n_init=3,
@@ -66,7 +69,7 @@ class Tracker:
             self.cfg.phalp.hungarian_th,
             self.cfg.phalp.past_lookback,
             self.cfg.phalp.shot,
-            hmr_model,
+            hmar,
         )
         self.max_age = max_age
         self.n_init = n_init
@@ -94,7 +97,9 @@ class Tracker:
             A list of detections at the current time step.
 
         """
-        matches, unmatched_tracks, unmatched_detections, statistics = self._match(detections)
+        matches, unmatched_tracks, unmatched_detections, statistics = self._match(
+            detections
+        )
         self.tracked_cost[frame_t] = [
             statistics[0],
             matches,
@@ -109,7 +114,9 @@ class Tracker:
             print(np.round(np.array(statistics[0]), 2))
 
         for track_idx, detection_idx in matches:
-            self.tracks[track_idx].update(detections[detection_idx], detection_idx, shot)
+            self.tracks[track_idx].update(
+                detections[detection_idx], detection_idx, shot
+            )
         self.accumulate_vectors([i[0] for i in matches])
 
         for track_idx in unmatched_tracks:
@@ -120,8 +127,16 @@ class Tracker:
             self._initiate_track(detections[detection_idx], detection_idx)
 
         self.tracks = [t for t in self.tracks if not t.is_deleted()]
-        active_targets = [t.track_id for t in self.tracks if t.is_confirmed() or t.is_tentative()]
-        appe_features, loca_features, pose_features, uv_maps, targets = [], [], [], [], []
+        active_targets = [
+            t.track_id for t in self.tracks if t.is_confirmed() or t.is_tentative()
+        ]
+        appe_features, loca_features, pose_features, uv_maps, targets = (
+            [],
+            [],
+            [],
+            [],
+            [],
+        )
         for track in self.tracks:
             if not (track.is_confirmed() or track.is_tentative()):
                 continue
@@ -145,7 +160,9 @@ class Tracker:
 
     def _match(self, detections):
         # Split track set into confirmed and unconfirmed tracks.
-        confirmed_tracks = [i for i, t in enumerate(self.tracks) if t.is_confirmed() or t.is_tentative()]
+        confirmed_tracks = [
+            i for i, t in enumerate(self.tracks) if t.is_confirmed() or t.is_tentative()
+        ]
 
         # Associate confirmed tracks using appearance features.
         matches, unmatched_tracks, unmatched_detections, cost_matrix = matching_simple(
@@ -158,11 +175,15 @@ class Tracker:
         )
 
         track_gt = [
-            t.track_data["history"][-1]["ground_truth"] for t in self.tracks if t.is_confirmed() or t.is_tentative()
+            t.track_data["history"][-1]["ground_truth"]
+            for t in self.tracks
+            if t.is_confirmed() or t.is_tentative()
         ]
         detect_gt = [d.detection_data["ground_truth"] for d in detections]
 
-        track_idt = [i for i, t in enumerate(self.tracks) if t.is_confirmed() or t.is_tentative()]
+        track_idt = [
+            i for i, t in enumerate(self.tracks) if t.is_confirmed() or t.is_tentative()
+        ]
         detect_idt = list(range(len(detections)))
 
         if self.cfg.use_gt:
@@ -215,7 +236,10 @@ class Tracker:
 
         for track_idx in track_ids:
             t_features.append(
-                [self.tracks[track_idx].track_data["history"][i]["time"] for i in range(self.cfg.phalp.track_history)]
+                [
+                    self.tracks[track_idx].track_data["history"][i]["time"]
+                    for i in range(self.cfg.phalp.track_history)
+                ]
             )
             l_time.append(self.tracks[track_idx].time_since_update)
 
@@ -249,7 +273,14 @@ class Tracker:
                 t_id = self.tracks[track_idx].track_id
                 p_data.append(
                     [
-                        [data["xy"][0], data["xy"][1], data["scale"], data["scale"], data["time"], t_id]
+                        [
+                            data["xy"][0],
+                            data["xy"][1],
+                            data["scale"],
+                            data["scale"],
+                            data["time"],
+                            t_id,
+                        ]
                         for data in self.tracks[track_idx].track_data["history"]
                     ]
                 )
@@ -270,11 +301,17 @@ class Tracker:
         if is_tracks:
             with torch.no_grad():
                 if "P" in self.cfg.phalp.predict:
-                    p_pred = predict_future_pose(p_features, p_data, t_features, l_time, self.pose_predictor)
+                    p_pred = predict_future_pose(
+                        p_features, p_data, t_features, l_time, self.pose_predictor
+                    )
 
                 if "L" in self.cfg.phalp.predict:
                     l_pred = predict_future_location(
-                        l_features, t_features, confidence, l_time, self.cfg.phalp.distance_type
+                        l_features,
+                        t_features,
+                        confidence,
+                        l_time,
+                        self.cfg.phalp.distance_type,
                     )
 
             for p_id, track_idx in enumerate(track_ids):

@@ -7,7 +7,7 @@ import einops
 from typing import Tuple, Dict
 from dataclasses import asdict
 
-from humanoid_vision.configs.base import BaseConfig
+from humanoid_vision.configs.base import PhalpConfig
 from humanoid_vision.common.smpl_output import HMRSMPLOutput
 
 from humanoid_vision.utils.geometry import rot6d_to_rotmat, aa_to_rotmat
@@ -25,7 +25,7 @@ def build_smpl_head(cfg):
 class SMPLTransformerDecoderHead(nn.Module):
     """Cross-attention based SMPL Transformer decoder"""
 
-    def __init__(self, cfg: BaseConfig):
+    def __init__(self, cfg: PhalpConfig):
         super().__init__()
         self.cfg = cfg
         self.joint_rep_type = self.cfg.MODEL.SMPL_HEAD.JOINT_REP
