@@ -1,11 +1,20 @@
 from dataclasses import dataclass
-from typing import Optional, Dict
-
-import torch
+from torch import Tensor
+from beartype import beartype
+from jaxtyping import jaxtyped
 
 from humanoid_vision.common.smpl_output import HMRSMPLOutput
+from humanoid_vision.common.types import (
+    CameraTranslation,
+    FocalLength,
+    Joints2D,
+    Joints3D,
+    Vertices,
+    WeakPerspCamera,
+)
 
 
+@jaxtyped(typechecker=beartype)
 @dataclass
 class HMROutput(HMRSMPLOutput):
     """Output of the HMR2 model.
@@ -23,10 +32,10 @@ class HMROutput(HMRSMPLOutput):
         losses: Optional dictionary of losses
     """
 
-    pred_cam: torch.Tensor
-    pred_cam_t: torch.Tensor
-    focal_length: torch.Tensor
-    pred_keypoints_3d: torch.Tensor
-    pred_keypoints_2d: torch.Tensor
-    pred_vertices: torch.Tensor
-    losses: Optional[Dict[str, torch.Tensor]] = None
+    pred_cam: WeakPerspCamera
+    pred_cam_t: CameraTranslation
+    focal_length: FocalLength
+    pred_keypoints_3d: Joints3D
+    pred_keypoints_2d: Joints2D
+    pred_vertices: Vertices
+    losses: dict[str, Tensor] | None = None

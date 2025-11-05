@@ -26,7 +26,12 @@ def create_billboard(camera, img_folder, distance=200, draw_fn=None):
     img_paths = sorted(img_folder.glob("*.jpg"))
     H, W = camera.rows, camera.cols
     pc = Billboard.from_camera_and_distance(
-        camera, distance, W, H, textures=[str(path) for path in img_paths], image_process_fn=draw_fn
+        camera,
+        distance,
+        W,
+        H,
+        textures=[str(path) for path in img_paths],
+        image_process_fn=draw_fn,
     )
     return pc
 
@@ -36,7 +41,9 @@ def convert_video_to_images(video_path, output_folder):
     output_folder.mkdir(exist_ok=True, parents=True)
     cap = cv2.VideoCapture(str(video_path))
     frame_id = 0
-    with tqdm.tqdm(total=int(cap.get(cv2.CAP_PROP_FRAME_COUNT)), desc="Converting video to images:") as pbar:
+    with tqdm.tqdm(
+        total=int(cap.get(cv2.CAP_PROP_FRAME_COUNT)), desc="Converting video to images:"
+    ) as pbar:
         while True:
             ret, frame = cap.read()
             if not ret:
@@ -55,7 +62,11 @@ def create_smpl_sequences(params, names=None, colors=None, post_fk_func=None):
     num_subjects = len(params["global_orient"])
 
     names = names if names is not None else [f"SMPL_{i}" for i in range(num_subjects)]
-    colors = colors if colors is not None else [(0.5, 0.5, 0.5, 1) for _ in range(num_subjects)]
+    colors = (
+        colors
+        if colors is not None
+        else [(0.5, 0.5, 0.5, 1) for _ in range(num_subjects)]
+    )
 
     smpl_seqs = []
     for i in range(num_subjects):
@@ -130,7 +141,9 @@ def make_post_fk_func(camera_params):
 
         # transform back to world coordinates
         vertices_cam -= t[:, None]
-        vertices_cam = (R[:, None].transpose(-1, -2) @ vertices_cam[..., None]).squeeze(-1)
+        vertices_cam = (R[:, None].transpose(-1, -2) @ vertices_cam[..., None]).squeeze(
+            -1
+        )
         vertices = vertices_cam
         return vertices, joints
 
@@ -159,7 +172,9 @@ if __name__ == "__main__":
     if not video_path.exists():
         raise FileNotFoundError(f"Video not found at {video_path}")
     if not calibration_path.exists():
-        raise FileNotFoundError(f"Calibration parameters not found at {calibration_path}")
+        raise FileNotFoundError(
+            f"Calibration parameters not found at {calibration_path}"
+        )
 
     camera_params = dict(np.load(calibration_path))
 
@@ -168,10 +183,19 @@ if __name__ == "__main__":
     colors = np.random.rand(len(smpl_params["betas"]), 4)
     colors[:, 3] = 1
     post_fk_func = make_post_fk_func(camera_params)
-    smpl_seqs = create_smpl_sequences(smpl_params, colors=colors, post_fk_func=post_fk_func)
+    smpl_seqs = create_smpl_sequences(
+        smpl_params, colors=colors, post_fk_func=post_fk_func
+    )
 
     # Setup camera and billboard
-    camera = OpenCVCamera(camera_params["K"], camera_params["Rt"], 1920, 1080, viewer=viewer, name="Overlay")
+    camera = OpenCVCamera(
+        camera_params["K"],
+        camera_params["Rt"],
+        1920,
+        1080,
+        viewer=viewer,
+        name="Overlay",
+    )
     ## create a tmp folder and convert video to images
     img_folder = Path(f"outputs/{clip_name}")
     convert_video_to_images(video_path, img_folder)
@@ -180,7 +204,9 @@ if __name__ == "__main__":
     viewer.scene.add(camera)
 
     # Add SMPL sequences to the scene
-    smpl_seq_node = Node(name="SMPL", n_frames=len(camera_params["K"]), is_selectable=False)
+    smpl_seq_node = Node(
+        name="SMPL", n_frames=len(camera_params["K"]), is_selectable=False
+    )
     for seq in smpl_seqs:
         smpl_seq_node.add(seq)
     viewer.scene.add(smpl_seq_node)

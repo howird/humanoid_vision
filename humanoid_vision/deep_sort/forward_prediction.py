@@ -1,5 +1,7 @@
-from typing import Optional
+from jaxtyping import Float, Int, jaxtyped
+from beartype import beartype
 import numpy as np
+from numpy import ndarray
 import torch
 
 from sklearn.linear_model import Ridge
@@ -8,7 +10,14 @@ from humanoid_vision.models.predictors.pose_transformer_v2 import PoseTransforme
 from humanoid_vision.utils.utils import get_prediction_interval
 
 
-def predict_future_pose(p_features, p_data, t_feature, time, pose_predictor: PoseTransformerV2):
+@jaxtyped(typechecker=beartype)
+def predict_future_pose(
+    p_features: Float[ndarray, "num_tracks track_history pose_dim"],
+    p_data: Float[ndarray, "num_tracks track_history 6"],
+    t_feature: Int[ndarray, "num_tracks track_history"],
+    time: Int[ndarray, "num_tracks"],
+    pose_predictor: PoseTransformerV2,
+) -> Float[torch.Tensor, "num_tracks pose_dim"]:
     en_pose = torch.from_numpy(p_features)
     en_data = torch.from_numpy(p_data)
     en_time = torch.from_numpy(t_feature)
@@ -24,7 +33,14 @@ def predict_future_pose(p_features, p_data, t_feature, time, pose_predictor: Pos
     return pose_pred.cpu()
 
 
-def predict_future_location(l_features, t_feature, confidence, time, distance_type):
+@jaxtyped(typechecker=beartype)
+def predict_future_location(
+    l_features: Float[ndarray, "num_tracks track_history loca_dim"],
+    t_feature: Int[ndarray, "num_tracks track_history"],
+    confidence: Float[ndarray, "num_tracks track_history"],
+    time: Int[ndarray, "num_tracks"],
+    distance_type: str,
+) -> Float[torch.Tensor, "num_tracks loca_dim"]:
     en_loca = torch.from_numpy(l_features)
     en_time = torch.from_numpy(t_feature)
     en_conf = torch.from_numpy(confidence)
@@ -83,7 +99,19 @@ def predict_future_location(l_features, t_feature, confidence, time, distance_ty
         y_hat = clf.predict(np.hstack((np.ones((t.size, 1)), t.reshape((-1, 1)))))
         y_pi = get_prediction_interval(y0_, y_hat, t, time_ + 1 + t[-1])
 
-        new_en_loca_n.append([x_p_, y_p_, np.exp(n_p), x_pi / loc_, y_pi / loc_, np.exp(n_pi) / loc_, 1, 1, 0])
+        new_en_loca_n.append(
+            [
+                x_p_,
+                y_p_,
+                np.exp(n_p),
+                x_pi / loc_,
+                y_pi / loc_,
+                np.exp(n_pi) / loc_,
+                1,
+                1,
+                0,
+            ]
+        )
         en_loca_xy[bs, -1, 44, 0] = x_p
         en_loca_xy[bs, -1, 44, 1] = y_p
 

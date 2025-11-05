@@ -1,4 +1,3 @@
-from typing import Optional, Tuple
 import pyrootutils
 
 root = pyrootutils.setup_root(
@@ -44,7 +43,7 @@ def save_configs(model_cfg: CfgNode, dataset_cfg: CfgNode, rootdir: str):
 
 
 @task_wrapper
-def train(cfg: DictConfig) -> Tuple[dict, dict]:
+def train(cfg: DictConfig) -> tuple[dict, dict]:
     # Load dataset config
     dataset_cfg = dataset_config()
 
@@ -59,7 +58,10 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
 
     # Setup Tensorboard logger
     logger = TensorBoardLogger(
-        os.path.join(cfg.paths.output_dir, "tensorboard"), name="", version="", default_hp_metric=False
+        os.path.join(cfg.paths.output_dir, "tensorboard"),
+        name="",
+        version="",
+        default_hp_metric=False,
     )
     loggers = [logger]
 
@@ -84,7 +86,9 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
         callbacks=callbacks,
         logger=loggers,
         plugins=(
-            SLURMEnvironment(requeue_signal=signal.SIGUSR2) if (cfg.get("launcher", None) is not None) else None
+            SLURMEnvironment(requeue_signal=signal.SIGUSR2)
+            if (cfg.get("launcher", None) is not None)
+            else None
         ),  # Submitit uses SIGUSR2
     )
 
@@ -106,8 +110,12 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
     log.info("Fitting done")
 
 
-@hydra.main(version_base="1.2", config_path=str(root / "hmr2/configs_hydra"), config_name="train.yaml")
-def main(cfg: DictConfig) -> Optional[float]:
+@hydra.main(
+    version_base="1.2",
+    config_path=str(root / "hmr2/configs_hydra"),
+    config_name="train.yaml",
+)
+def main(cfg: DictConfig) -> float | None:
     # train the model
     train(cfg)
 

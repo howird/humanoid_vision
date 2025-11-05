@@ -2,7 +2,6 @@ import argparse
 import os
 from pathlib import Path
 import traceback
-from typing import Optional
 
 import pandas as pd
 import torch
@@ -13,27 +12,50 @@ from humanoid_vision.utils import Evaluator, recursive_to
 from tqdm import tqdm
 
 from humanoid_vision.configs import CACHE_DIR_4DHUMANS
-from humanoid_vision.models import HMR2, download_models, load_hmr2, DEFAULT_CHECKPOINT
+from humanoid_vision.models import download_models, load_hmr2, DEFAULT_CHECKPOINT
 
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate trained models")
     parser.add_argument(
-        "--checkpoint", type=str, default=DEFAULT_CHECKPOINT, help="Path to pretrained model checkpoint"
+        "--checkpoint",
+        type=str,
+        default=DEFAULT_CHECKPOINT,
+        help="Path to pretrained model checkpoint",
     )
-    parser.add_argument("--results_file", type=str, default="results/eval_regression.csv", help="Path to results file.")
+    parser.add_argument(
+        "--results_file",
+        type=str,
+        default="results/eval_regression.csv",
+        help="Path to results file.",
+    )
     parser.add_argument(
         "--dataset",
         type=str,
         default="H36M-VAL-P2,3DPW-TEST,LSP-EXTENDED,POSETRACK-VAL,COCO-VAL",
         help="Dataset to evaluate",
     )  # choices=['H36M-VAL-P2', '3DPW-TEST', 'MPI-INF-TEST']
-    parser.add_argument("--batch_size", type=int, default=16, help="Batch size for inference")
-    parser.add_argument("--num_samples", type=int, default=1, help="Number of test samples to draw")
-    parser.add_argument("--num_workers", type=int, default=8, help="Number of workers used for data loading")
-    parser.add_argument("--log_freq", type=int, default=10, help="How often to log results")
     parser.add_argument(
-        "--shuffle", dest="shuffle", action="store_true", default=False, help="Shuffle the dataset during evaluation"
+        "--batch_size", type=int, default=16, help="Batch size for inference"
+    )
+    parser.add_argument(
+        "--num_samples", type=int, default=1, help="Number of test samples to draw"
+    )
+    parser.add_argument(
+        "--num_workers",
+        type=int,
+        default=8,
+        help="Number of workers used for data loading",
+    )
+    parser.add_argument(
+        "--log_freq", type=int, default=10, help="How often to log results"
+    )
+    parser.add_argument(
+        "--shuffle",
+        dest="shuffle",
+        action="store_true",
+        default=False,
+        help="Shuffle the dataset during evaluation",
     )
     parser.add_argument("--exp_name", type=str, default=None, help="Experiment name")
 
@@ -115,7 +137,7 @@ def save_eval_result(
     checkpoint_path: str,
     dataset_name: str,
     # start_time: pd.Timestamp,
-    error: Optional[str] = None,
+    error: str | None = None,
     iters_done=None,
     exp_name=None,
 ) -> None:

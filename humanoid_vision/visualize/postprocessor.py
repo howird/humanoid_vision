@@ -6,7 +6,6 @@ import joblib
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from humanoid_vision.utils.utils import progress_bar
 from humanoid_vision.utils.utils_tracks import create_fast_tracklets, get_tracks
@@ -22,7 +21,9 @@ class Postprocessor(nn.Module):
         self.device = "cuda"
         self.phalp_tracker = phalp_tracker
 
-    def post_process(self, final_visuals_dic, save_fast_tracks=False, video_pkl_name=""):
+    def post_process(
+        self, final_visuals_dic, save_fast_tracks=False, video_pkl_name=""
+    ):
         if self.cfg.post_process.apply_smoothing:
             final_visuals_dic_ = copy.deepcopy(final_visuals_dic)
             track_dict = get_tracks(final_visuals_dic_)
@@ -31,27 +32,44 @@ class Postprocessor(nn.Module):
                 fast_track_ = create_fast_tracklets(track_dict[tid_])
 
                 with torch.no_grad():
-                    smoothed_fast_track_ = self.phalp_tracker.pose_predictor.smooth_tracks(
-                        fast_track_, moving_window=True, step=32, window=32
+                    smoothed_fast_track_ = (
+                        self.phalp_tracker.pose_predictor.smooth_tracks(
+                            fast_track_, moving_window=True, step=32, window=32
+                        )
                     )
 
                 if save_fast_tracks:
                     frame_length = len(smoothed_fast_track_["frame_name"])
                     dict_ava_feat = {}
                     dict_ava_psudo_labels = {}
-                    for idx, appe_idx in enumerate(smoothed_fast_track_["apperance_index"]):
-                        dict_ava_feat[appe_idx[0, 0]] = smoothed_fast_track_["apperance_emb"][idx]
-                        dict_ava_psudo_labels[appe_idx[0, 0]] = smoothed_fast_track_["action_emb"][idx]
-                    smoothed_fast_track_["action_label_gt"] = np.zeros((frame_length, 1, 80)).astype(int)
+                    for idx, appe_idx in enumerate(
+                        smoothed_fast_track_["apperance_index"]
+                    ):
+                        dict_ava_feat[appe_idx[0, 0]] = smoothed_fast_track_[
+                            "apperance_emb"
+                        ][idx]
+                        dict_ava_psudo_labels[appe_idx[0, 0]] = smoothed_fast_track_[
+                            "action_emb"
+                        ][idx]
+                    smoothed_fast_track_["action_label_gt"] = np.zeros(
+                        (frame_length, 1, 80)
+                    ).astype(int)
                     smoothed_fast_track_["action_label_psudo"] = dict_ava_psudo_labels
                     smoothed_fast_track_["apperance_dict"] = dict_ava_feat
-                    smoothed_fast_track_["pose_shape"] = smoothed_fast_track_["pose_shape"].cpu().numpy()
+                    smoothed_fast_track_["pose_shape"] = (
+                        smoothed_fast_track_["pose_shape"].cpu().numpy()
+                    )
 
                     # save the fast tracks in a pkl file
                     save_pkl_path = os.path.join(
                         self.cfg.video.output_dir,
                         "results_temporal_fast/",
-                        video_pkl_name + "_" + str(tid_) + "_" + str(frame_length) + ".pkl",
+                        video_pkl_name
+                        + "_"
+                        + str(tid_)
+                        + "_"
+                        + str(frame_length)
+                        + ".pkl",
                     )
                     joblib.dump(smoothed_fast_track_, save_pkl_path)
 
@@ -65,7 +83,9 @@ class Postprocessor(nn.Module):
                         smpl_camera = pose_camera_vector_to_smpl(pose_shape_[0])
                         smpl_ = smpl_camera[0]
                         camera = smpl_camera[1]
-                        camera_ = smoothed_fast_track_["cam_smoothed"][i_][0].cpu().numpy()
+                        camera_ = (
+                            smoothed_fast_track_["cam_smoothed"][i_][0].cpu().numpy()
+                        )
 
                         dict_ = {}
                         for k, v in smpl_.items():
@@ -75,15 +95,21 @@ class Postprocessor(nn.Module):
                             final_visuals_dic[f_key]["camera"][idx_[0]] = np.array(
                                 [camera_[0], camera_[1], 200 * camera_[2]]
                             )
-                            final_visuals_dic[f_key]["smpl"][idx_[0]] = copy.deepcopy(dict_)
+                            final_visuals_dic[f_key]["smpl"][idx_[0]] = copy.deepcopy(
+                                dict_
+                            )
                             final_visuals_dic[f_key]["tracked_time"][idx_[0]] = -1
 
                         # attach ava labels
                         ava_ = smoothed_fast_track_["ava_action"][i_]
                         ava_ = ava_.cpu()
                         ava_labels, _ = to_ava_labels(ava_, self.cfg)
-                        final_visuals_dic[f_key].setdefault("label", {})[tid_] = ava_labels
-                        final_visuals_dic[f_key].setdefault("ava_action", {})[tid_] = ava_
+                        final_visuals_dic[f_key].setdefault("label", {})[tid_] = (
+                            ava_labels
+                        )
+                        final_visuals_dic[f_key].setdefault("ava_action", {})[tid_] = (
+                            ava_
+                        )
 
         return final_visuals_dic
 
@@ -93,17 +119,29 @@ class Postprocessor(nn.Module):
         final_visuals_dic = joblib.load(phalp_pkl_path)
 
         os.makedirs(self.cfg.video.output_dir + "/results_temporal/", exist_ok=True)
-        os.makedirs(self.cfg.video.output_dir + "/results_temporal_fast/", exist_ok=True)
-        os.makedirs(self.cfg.video.output_dir + "/results_temporal_videos/", exist_ok=True)
-        save_pkl_path = os.path.join(self.cfg.video.output_dir, "results_temporal/", video_pkl_name + ".pkl")
-        save_video_path = os.path.join(self.cfg.video.output_dir, "results_temporal_videos/", video_pkl_name + "_.mp4")
+        os.makedirs(
+            self.cfg.video.output_dir + "/results_temporal_fast/", exist_ok=True
+        )
+        os.makedirs(
+            self.cfg.video.output_dir + "/results_temporal_videos/", exist_ok=True
+        )
+        save_pkl_path = os.path.join(
+            self.cfg.video.output_dir, "results_temporal/", video_pkl_name + ".pkl"
+        )
+        save_video_path = os.path.join(
+            self.cfg.video.output_dir,
+            "results_temporal_videos/",
+            video_pkl_name + "_.mp4",
+        )
 
         if os.path.exists(save_pkl_path) and not (self.cfg.overwrite):
             return 0
 
         # apply smoothing/action recognition etc.
         final_visuals_dic = self.post_process(
-            final_visuals_dic, save_fast_tracks=self.cfg.post_process.save_fast_tracks, video_pkl_name=video_pkl_name
+            final_visuals_dic,
+            save_fast_tracks=self.cfg.post_process.save_fast_tracks,
+            video_pkl_name=video_pkl_name,
         )
 
         # render the video
@@ -118,8 +156,12 @@ class Postprocessor(nn.Module):
 
         os.makedirs(self.cfg.video.output_dir + "/videos/", exist_ok=True)
         os.makedirs(self.cfg.video.output_dir + "/videos_tmp/", exist_ok=True)
-        save_pkl_path = os.path.join(self.cfg.video.output_dir, "videos_tmp/", video_pkl_name + ".pkl")
-        save_video_path = os.path.join(self.cfg.video.output_dir, "videos/", video_pkl_name + ".mp4")
+        save_pkl_path = os.path.join(
+            self.cfg.video.output_dir, "videos_tmp/", video_pkl_name + ".pkl"
+        )
+        save_video_path = os.path.join(
+            self.cfg.video.output_dir, "videos/", video_pkl_name + ".mp4"
+        )
 
         if os.path.exists(save_pkl_path) and not (self.cfg.overwrite):
             return 0
@@ -140,14 +182,22 @@ class Postprocessor(nn.Module):
             image = self.phalp_tracker.io_manager.read_frame(frame_path)
 
             ################### Front view #########################
-            self.cfg.render.up_scale = int(self.cfg.render.output_resolution / self.cfg.render.res)
-            self.phalp_tracker.visualizer.reset_render(self.cfg.render.res * self.cfg.render.up_scale)
+            self.cfg.render.up_scale = int(
+                self.cfg.render.output_resolution / self.cfg.render.res
+            )
+            self.phalp_tracker.visualizer.reset_render(
+                self.cfg.render.res * self.cfg.render.up_scale
+            )
             final_visuals_dic[frame_path]["frame"] = image
-            panel_render, f_size = self.phalp_tracker.visualizer.render_video(final_visuals_dic[frame_path])
+            panel_render, f_size = self.phalp_tracker.visualizer.render_video(
+                final_visuals_dic[frame_path]
+            )
             del final_visuals_dic[frame_path]["frame"]
 
             # resize the image back to render resolution
-            panel_rgb = cv2.resize(image, (f_size[0], f_size[1]), interpolation=cv2.INTER_AREA)
+            panel_rgb = cv2.resize(
+                image, (f_size[0], f_size[1]), interpolation=cv2.INTER_AREA
+            )
 
             # save the predicted actions labels
             if "label" in final_visuals_dic[frame_path]:
@@ -161,7 +211,10 @@ class Postprocessor(nn.Module):
             final_panel = panel_1
 
             self.phalp_tracker.io_manager.save_video(
-                save_video_path, final_panel, (final_panel.shape[1], final_panel.shape[0]), t=t_
+                save_video_path,
+                final_panel,
+                (final_panel.shape[1], final_panel.shape[0]),
+                t=t_,
             )
             t_ += 1
 

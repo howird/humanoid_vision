@@ -1,5 +1,5 @@
 from inspect import isfunction
-from typing import Callable, Optional
+from typing import Callable
 
 import torch
 from einops import rearrange
@@ -25,7 +25,9 @@ def default(val, d):
 
 
 class PreNorm(nn.Module):
-    def __init__(self, dim: int, fn: Callable, norm: str = "layer", norm_cond_dim: int = -1):
+    def __init__(
+        self, dim: int, fn: Callable, norm: str = "layer", norm_cond_dim: int = -1
+    ):
         super().__init__()
         self.norm = normalization_layer(norm, dim, norm_cond_dim)
         self.fn = fn
@@ -66,7 +68,11 @@ class Attention(nn.Module):
 
         self.to_qkv = nn.Linear(dim, inner_dim * 3, bias=False)
 
-        self.to_out = nn.Sequential(nn.Linear(inner_dim, dim), nn.Dropout(dropout)) if project_out else nn.Identity()
+        self.to_out = (
+            nn.Sequential(nn.Linear(inner_dim, dim), nn.Dropout(dropout))
+            if project_out
+            else nn.Identity()
+        )
 
     def forward(self, x):
         qkv = self.to_qkv(x).chunk(3, dim=-1)
@@ -98,13 +104,19 @@ class CrossAttention(nn.Module):
         self.to_kv = nn.Linear(context_dim, inner_dim * 2, bias=False)
         self.to_q = nn.Linear(dim, inner_dim, bias=False)
 
-        self.to_out = nn.Sequential(nn.Linear(inner_dim, dim), nn.Dropout(dropout)) if project_out else nn.Identity()
+        self.to_out = (
+            nn.Sequential(nn.Linear(inner_dim, dim), nn.Dropout(dropout))
+            if project_out
+            else nn.Identity()
+        )
 
     def forward(self, x, context=None):
         context = default(context, x)
         k, v = self.to_kv(context).chunk(2, dim=-1)
         q = self.to_q(x)
-        q, k, v = map(lambda t: rearrange(t, "b n (h d) -> b h n d", h=self.heads), [q, k, v])
+        q, k, v = map(
+            lambda t: rearrange(t, "b n (h d) -> b h n d", h=self.heads), [q, k, v]
+        )
 
         dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
 
@@ -160,13 +172,19 @@ class TransformerCrossAttn(nn.Module):
         dropout: float = 0.0,
         norm: str = "layer",
         norm_cond_dim: int = -1,
-        context_dim: Optional[int] = None,
+        context_dim: int | None = None,
     ):
         super().__init__()
         self.layers = nn.ModuleList([])
         for _ in range(depth):
             sa = Attention(dim, heads=heads, dim_head=dim_head, dropout=dropout)
-            ca = CrossAttention(dim, context_dim=context_dim, heads=heads, dim_head=dim_head, dropout=dropout)
+            ca = CrossAttention(
+                dim,
+                context_dim=context_dim,
+                heads=heads,
+                dim_head=dim_head,
+                dropout=dropout,
+            )
             ff = FeedForward(dim, mlp_dim, dropout=dropout)
             self.layers.append(
                 nn.ModuleList(
@@ -182,7 +200,9 @@ class TransformerCrossAttn(nn.Module):
         if context_list is None:
             context_list = [context] * len(self.layers)
         if len(context_list) != len(self.layers):
-            raise ValueError(f"len(context_list) != len(self.layers) ({len(context_list)} != {len(self.layers)})")
+            raise ValueError(
+                f"len(context_list) != len(self.layers) ({len(context_list)} != {len(self.layers)})"
+            )
 
         for i, (self_attn, cross_attn, ff) in enumerate(self.layers):
             x = self_attn(x, *args) + x
@@ -195,7 +215,9 @@ class DropTokenDropout(nn.Module):
     def __init__(self, p: float = 0.1):
         super().__init__()
         if p < 0 or p > 1:
-            raise ValueError("dropout probability has to be between 0 and 1, but got {}".format(p))
+            raise ValueError(
+                "dropout probability has to be between 0 and 1, but got {}".format(p)
+            )
         self.p = p
 
     def forward(self, x: torch.Tensor):
@@ -212,7 +234,9 @@ class ZeroTokenDropout(nn.Module):
     def __init__(self, p: float = 0.1):
         super().__init__()
         if p < 0 or p > 1:
-            raise ValueError("dropout probability has to be between 0 and 1, but got {}".format(p))
+            raise ValueError(
+                "dropout probability has to be between 0 and 1, but got {}".format(p)
+            )
         self.p = p
 
     def forward(self, x: torch.Tensor):
@@ -263,7 +287,14 @@ class TransformerEncoder(nn.Module):
         self.emb_dropout_loc = emb_dropout_loc
 
         self.transformer = Transformer(
-            dim, depth, heads, dim_head, mlp_dim, dropout, norm=norm, norm_cond_dim=norm_cond_dim
+            dim,
+            depth,
+            heads,
+            dim_head,
+            mlp_dim,
+            dropout,
+            norm=norm,
+            norm_cond_dim=norm_cond_dim,
         )
 
     def forward(self, inp: torch.Tensor, *args, **kwargs):
@@ -299,7 +330,7 @@ class TransformerDecoder(nn.Module):
         emb_dropout_type: str = "drop",
         norm: str = "layer",
         norm_cond_dim: int = -1,
-        context_dim: Optional[int] = None,
+        context_dim: int | None = None,
         skip_token_embedding: bool = False,
     ):
         super().__init__()
@@ -308,7 +339,9 @@ class TransformerDecoder(nn.Module):
         else:
             self.to_token_embedding = nn.Identity()
             if token_dim != dim:
-                raise ValueError(f"token_dim ({token_dim}) != dim ({dim}) when skip_token_embedding is True")
+                raise ValueError(
+                    f"token_dim ({token_dim}) != dim ({dim}) when skip_token_embedding is True"
+                )
 
         self.pos_embedding = nn.Parameter(torch.randn(1, num_tokens, dim))
         if emb_dropout_type == "drop":

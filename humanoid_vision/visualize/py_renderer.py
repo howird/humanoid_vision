@@ -50,7 +50,11 @@ def make_4x4_pose(R, t):
     """
     dims = R.shape[:-2]
     pose_3x4 = torch.cat([R, t.view(*dims, 3, 1)], dim=-1)
-    bottom = torch.tensor([0, 0, 0, 1], device=R.device).reshape(*(1,) * len(dims), 1, 4).expand(*dims, 1, 4)
+    bottom = (
+        torch.tensor([0, 0, 0, 1], device=R.device)
+        .reshape(*(1,) * len(dims), 1, 4)
+        .expand(*dims, 1, 4)
+    )
     return torch.cat([pose_3x4, bottom], dim=-2)
 
 
@@ -93,8 +97,17 @@ class Renderer:
     Code adapted from https://github.com/vchoutas/smplify-x
     """
 
-    def __init__(self, focal_length=5000, img_res=224, faces=None, metallicFactor=0.0, roughnessFactor=0.5):
-        self.renderer = pyrender.OffscreenRenderer(viewport_width=img_res, viewport_height=img_res, point_size=1.0)
+    def __init__(
+        self,
+        focal_length=5000,
+        img_res=224,
+        faces=None,
+        metallicFactor=0.0,
+        roughnessFactor=0.5,
+    ):
+        self.renderer = pyrender.OffscreenRenderer(
+            viewport_width=img_res, viewport_height=img_res, point_size=1.0
+        )
         self.focal_length = focal_length
         self.camera_center = [img_res // 2, img_res // 2]
         self.faces = faces
@@ -105,8 +118,12 @@ class Renderer:
     # def __del__(self):
     #     del self.renderer
 
-    def visualize_all(self, vertices, camera_translation, color, images, use_image=True):
-        baseColorFactors = np.hstack([color[:, [2, 1, 0]], np.ones((color.shape[0], 1))])
+    def visualize_all(
+        self, vertices, camera_translation, color, images, use_image=True
+    ):
+        baseColorFactors = np.hstack(
+            [color[:, [2, 1, 0]], np.ones((color.shape[0], 1))]
+        )
 
         fl = self.focal_length
         verts = vertices.copy()
@@ -122,8 +139,12 @@ class Renderer:
             output_img = color[:, :, :3]
         return output_img, valid_mask
 
-    def __call__(self, vertices, focal_length=5000, baseColorFactors=[(1.0, 1.0, 0.9, 1.0)]):
-        scene = pyrender.Scene(bg_color=[0.0, 0.0, 0.0, 0.0], ambient_light=(0.3, 0.3, 0.3))
+    def __call__(
+        self, vertices, focal_length=5000, baseColorFactors=[(1.0, 1.0, 0.9, 1.0)]
+    ):
+        scene = pyrender.Scene(
+            bg_color=[0.0, 0.0, 0.0, 0.0], ambient_light=(0.3, 0.3, 0.3)
+        )
 
         for i_, verts in enumerate(vertices):
             material = pyrender.MetallicRoughnessMaterial(
@@ -141,7 +162,11 @@ class Renderer:
 
         camera_pose = np.eye(4)
         camera = pyrender.IntrinsicsCamera(
-            fx=self.focal_length, fy=self.focal_length, cx=self.camera_center[0], cy=self.camera_center[1], zfar=1000
+            fx=self.focal_length,
+            fy=self.focal_length,
+            cx=self.camera_center[0],
+            cy=self.camera_center[1],
+            zfar=1000,
         )
 
         # Create camera node and add it to pyRender scene

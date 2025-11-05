@@ -1,5 +1,3 @@
-from typing import Dict, Optional
-
 import torch
 import numpy as np
 import pytorch_lightning as pl
@@ -12,7 +10,9 @@ from .image_dataset import ImageDataset
 from .mocap_dataset import MoCapDataset
 
 
-def create_dataset(cfg: CfgNode, dataset_cfg: CfgNode, train: bool = True, **kwargs) -> Dataset:
+def create_dataset(
+    cfg: CfgNode, dataset_cfg: CfgNode, train: bool = True, **kwargs
+) -> Dataset:
     """
     Instantiate a dataset from a config file.
     Args:
@@ -25,19 +25,26 @@ def create_dataset(cfg: CfgNode, dataset_cfg: CfgNode, train: bool = True, **kwa
     return dataset_type(cfg, **to_lower(dataset_cfg), train=train, **kwargs)
 
 
-def create_webdataset(cfg: CfgNode, dataset_cfg: CfgNode, train: bool = True) -> Dataset:
+def create_webdataset(
+    cfg: CfgNode, dataset_cfg: CfgNode, train: bool = True
+) -> Dataset:
     """
     Like `create_dataset` but load data from tars.
     """
     dataset_type = Dataset.registry[dataset_cfg.TYPE]
-    return dataset_type.load_tars_as_webdataset(cfg, **to_lower(dataset_cfg), train=train)
+    return dataset_type.load_tars_as_webdataset(
+        cfg, **to_lower(dataset_cfg), train=train
+    )
 
 
 class MixedWebDataset(wds.WebDataset):
     def __init__(self, cfg: CfgNode, dataset_cfg: CfgNode, train: bool = True) -> None:
         super(wds.WebDataset, self).__init__()
         dataset_list = cfg.DATASETS.TRAIN if train else cfg.DATASETS.VAL
-        datasets = [create_webdataset(cfg, dataset_cfg[dataset], train=train) for dataset, v in dataset_list.items()]
+        datasets = [
+            create_webdataset(cfg, dataset_cfg[dataset], train=train)
+            for dataset, v in dataset_list.items()
+        ]
         weights = np.array([v.WEIGHT for dataset, v in dataset_list.items()])
         weights = weights / weights.sum()  # normalize
         self.append(wds.RandomMix(datasets, weights))
@@ -59,7 +66,7 @@ class HMR2DataModule(pl.LightningDataModule):
         self.test_dataset = None
         self.mocap_dataset = None
 
-    def setup(self, stage: Optional[str] = None) -> None:
+    def setup(self, stage: str | None = None) -> None:
         """
         Load datasets necessary for training
         Args:
@@ -67,16 +74,22 @@ class HMR2DataModule(pl.LightningDataModule):
         """
         if self.train_dataset == None:
             self.train_dataset = (
-                MixedWebDataset(self.cfg, self.dataset_cfg, train=True).with_epoch(100_000).shuffle(4000)
+                MixedWebDataset(self.cfg, self.dataset_cfg, train=True)
+                .with_epoch(100_000)
+                .shuffle(4000)
             )
-            self.val_dataset = MixedWebDataset(self.cfg, self.dataset_cfg, train=False).shuffle(4000)
-            self.mocap_dataset = MoCapDataset(**to_lower(self.dataset_cfg[self.cfg.DATASETS.MOCAP]))
+            self.val_dataset = MixedWebDataset(
+                self.cfg, self.dataset_cfg, train=False
+            ).shuffle(4000)
+            self.mocap_dataset = MoCapDataset(
+                **to_lower(self.dataset_cfg[self.cfg.DATASETS.MOCAP])
+            )
 
-    def train_dataloader(self) -> Dict:
+    def train_dataloader(self) -> dict:
         """
         Setup training data loader.
         Returns:
-            Dict: Dictionary containing image and mocap data dataloaders
+            dict: Dictionary containing image and mocap data dataloaders
         """
         train_dataloader = torch.utils.data.DataLoader(
             self.train_dataset,
@@ -101,6 +114,9 @@ class HMR2DataModule(pl.LightningDataModule):
             torch.utils.data.DataLoader: Validation dataloader
         """
         val_dataloader = torch.utils.data.DataLoader(
-            self.val_dataset, self.cfg.TRAIN.BATCH_SIZE, drop_last=True, num_workers=self.cfg.GENERAL.NUM_WORKERS
+            self.val_dataset,
+            self.cfg.TRAIN.BATCH_SIZE,
+            drop_last=True,
+            num_workers=self.cfg.GENERAL.NUM_WORKERS,
         )
         return val_dataloader

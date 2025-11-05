@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 
 from humanoid_vision.configs import CACHE_DIR_4DHUMANS
-from humanoid_vision.models import HMR2, download_models, load_hmr2, DEFAULT_CHECKPOINT
+from humanoid_vision.models import download_models, load_hmr2, DEFAULT_CHECKPOINT
 from humanoid_vision.utils.misc import recursive_to
 from humanoid_vision.datasets.vitdet_dataset import (
     ViTDetDataset,
@@ -102,7 +102,6 @@ def main():
 
     if args.detector == "vitdet":
         from detectron2.config import LazyConfig
-        import humanoid_vision
 
         cfg_path = (
             Path(hmr2.__file__).parent
@@ -116,7 +115,6 @@ def main():
         detector = DefaultPredictor_Lazy(detectron2_cfg)
     elif args.detector == "regnety":
         from detectron2 import model_zoo
-        from detectron2.config import get_cfg
 
         detectron2_cfg = model_zoo.get_config(
             "new_baselines/mask_rcnn_regnety_4gf_dds_FPN_400ep_LSJ.py", trained=True

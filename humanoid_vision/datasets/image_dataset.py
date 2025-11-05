@@ -2,7 +2,7 @@ import copy
 import os
 import numpy as np
 import torch
-from typing import Any, Dict, List, Union
+from typing import Any
 from yacs.config import CfgNode
 import braceexpand
 import cv2
@@ -16,7 +16,7 @@ def expand(s):
     return os.path.expanduser(os.path.expandvars(s))
 
 
-def expand_urls(urls: Union[str, List[str]]):
+def expand_urls(urls: str | list[str]):
     if isinstance(urls, str):
         urls = [urls]
     urls = [u for url in urls for u in braceexpand.braceexpand(expand(url))]
@@ -39,7 +39,33 @@ CORRUPT_KEYS = {
     *{f"aic-train-vitpose/{k}" for k in AIC_TRAIN_CORRUPT_KEYS},
 }
 
-body_permutation = [0, 1, 5, 6, 7, 2, 3, 4, 8, 12, 13, 14, 9, 10, 11, 16, 15, 18, 17, 22, 23, 24, 19, 20, 21]
+body_permutation = [
+    0,
+    1,
+    5,
+    6,
+    7,
+    2,
+    3,
+    4,
+    8,
+    12,
+    13,
+    14,
+    9,
+    10,
+    11,
+    16,
+    15,
+    18,
+    17,
+    22,
+    23,
+    24,
+    19,
+    20,
+    21,
+]
 extra_permutation = [5, 4, 3, 2, 1, 0, 11, 10, 9, 8, 7, 6, 12, 13, 14, 15, 16, 17, 18]
 FLIP_KEYPOINT_PERMUTATION = body_permutation + [25 + i for i in extra_permutation]
 
@@ -50,7 +76,13 @@ DEFAULT_IMG_SIZE = 256
 
 class ImageDataset(Dataset):
     def __init__(
-        self, cfg: CfgNode, dataset_file: str, img_dir: str, train: bool = True, prune: Dict[str, Any] = {}, **kwargs
+        self,
+        cfg: CfgNode,
+        dataset_file: str,
+        img_dir: str,
+        train: bool = True,
+        prune: dict[str, Any] = {},
+        **kwargs,
     ):
         """
         Dataset class used for loading images and corresponding annotations.
@@ -73,7 +105,9 @@ class ImageDataset(Dataset):
 
         self.imgname = self.data["imgname"]
         self.personid = np.zeros(len(self.imgname), dtype=np.int32)
-        self.extra_info = self.data.get("extra_info", [{} for _ in range(len(self.imgname))])
+        self.extra_info = self.data.get(
+            "extra_info", [{} for _ in range(len(self.imgname))]
+        )
 
         self.flip_keypoint_permutation = copy.copy(FLIP_KEYPOINT_PERMUTATION)
 
@@ -111,7 +145,9 @@ class ImageDataset(Dataset):
         except KeyError:
             extra_keypoints_2d = np.zeros((len(self.center), 19, 3))
 
-        self.keypoints_2d = np.concatenate((body_keypoints_2d, extra_keypoints_2d), axis=1).astype(np.float32)
+        self.keypoints_2d = np.concatenate(
+            (body_keypoints_2d, extra_keypoints_2d), axis=1
+        ).astype(np.float32)
 
         # Try to get 3d keypoints, if available
         try:
@@ -126,12 +162,14 @@ class ImageDataset(Dataset):
 
         body_keypoints_3d[:, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], -1] = 0
 
-        self.keypoints_3d = np.concatenate((body_keypoints_3d, extra_keypoints_3d), axis=1).astype(np.float32)
+        self.keypoints_3d = np.concatenate(
+            (body_keypoints_3d, extra_keypoints_3d), axis=1
+        ).astype(np.float32)
 
     def __len__(self) -> int:
         return len(self.scale)
 
-    def __getitem__(self, idx: int) -> Dict:
+    def __getitem__(self, idx: int) -> dict:
         """
         Returns an example from the dataset.
         """
@@ -148,7 +186,9 @@ class ImageDataset(Dataset):
         center_y = center[1]
         scale = self.scale[idx]
         BBOX_SHAPE = self.cfg.MODEL.get("BBOX_SHAPE", None)
-        bbox_size = expand_to_aspect_ratio(scale * 200, target_aspect_ratio=BBOX_SHAPE).max()
+        bbox_size = expand_to_aspect_ratio(
+            scale * 200, target_aspect_ratio=BBOX_SHAPE
+        ).max()
         bbox_expand_factor = bbox_size / ((scale * 200).max())
         body_pose = self.body_pose[idx].copy().astype(np.float32)
         betas = self.betas[idx].copy().astype(np.float32)
@@ -156,15 +196,34 @@ class ImageDataset(Dataset):
         has_body_pose = self.has_body_pose[idx].copy()
         has_betas = self.has_betas[idx].copy()
 
-        smpl_params = {"global_orient": body_pose[:3], "body_pose": body_pose[3:], "betas": betas}
+        smpl_params = {
+            "global_orient": body_pose[:3],
+            "body_pose": body_pose[3:],
+            "betas": betas,
+        }
 
-        has_smpl_params = {"global_orient": has_body_pose, "body_pose": has_body_pose, "betas": has_betas}
+        has_smpl_params = {
+            "global_orient": has_body_pose,
+            "body_pose": has_body_pose,
+            "betas": has_betas,
+        }
 
-        smpl_params_is_axis_angle = {"global_orient": True, "body_pose": True, "betas": False}
+        smpl_params_is_axis_angle = {
+            "global_orient": True,
+            "body_pose": True,
+            "betas": False,
+        }
 
         augm_config = self.cfg.DATASETS.CONFIG
         # Crop image and (possibly) perform data augmentation
-        img_patch, keypoints_2d, keypoints_3d, smpl_params, has_smpl_params, img_size = get_example(
+        (
+            img_patch,
+            keypoints_2d,
+            keypoints_3d,
+            smpl_params,
+            has_smpl_params,
+            img_size,
+        ) = get_example(
             image_file,
             center_x,
             center_y,
@@ -209,7 +268,7 @@ class ImageDataset(Dataset):
     @staticmethod
     def load_tars_as_webdataset(
         cfg: CfgNode,
-        urls: Union[str, List[str]],
+        urls: str | list[str],
         train: bool,
         resampled=False,
         epoch_size=None,
@@ -245,7 +304,9 @@ class ImageDataset(Dataset):
             if thresh > 0:
                 kp2d = item["data.pyd"]["keypoints_2d"]
                 kp2d_conf = np.where(kp2d[:, 2] < thresh, 0.0, kp2d[:, 2])
-                item["data.pyd"]["keypoints_2d"] = np.concatenate([kp2d[:, :2], kp2d_conf[:, None]], axis=1)
+                item["data.pyd"]["keypoints_2d"] = np.concatenate(
+                    [kp2d[:, :2], kp2d_conf[:, None]], axis=1
+                )
             return item
 
         def filter_numkp(item, numkp=4, thresh=0.0):
@@ -253,7 +314,12 @@ class ImageDataset(Dataset):
             return (kp_conf > thresh).sum() > numkp
 
         def filter_reproj_error(item, thresh=10**4.5):
-            losses = item["data.pyd"].get("extra_info", {}).get("fitting_loss", np.array({})).item()
+            losses = (
+                item["data.pyd"]
+                .get("extra_info", {})
+                .get("fitting_loss", np.array({}))
+                .item()
+            )
             reproj_loss = losses.get("reprojection_loss", None)
             return reproj_loss is None or reproj_loss < thresh
 
@@ -289,8 +355,8 @@ class ImageDataset(Dataset):
             # We either have both body_pose and betas, or neither
             has_betas = item["data.pyd"]["has_betas"]
             has_body_pose = item["data.pyd"]["has_body_pose"]
-            item["data.pyd"]["has_betas"] = item["data.pyd"]["has_body_pose"] = np.array(
-                float((has_body_pose > 0) and (has_betas > 0))
+            item["data.pyd"]["has_betas"] = item["data.pyd"]["has_body_pose"] = (
+                np.array(float((has_body_pose > 0) and (has_betas > 0)))
             )
             return item
 
@@ -336,9 +402,13 @@ class ImageDataset(Dataset):
         FILTER_REPROJ_THRESH = cfg.DATASETS.get("FILTER_REPROJ_THRESH", 0.0)
         FILTER_MIN_BBOX_SIZE = cfg.DATASETS.get("FILTER_MIN_BBOX_SIZE", 0.0)
         if SUPPRESS_KP_CONF_THRESH > 0:
-            dataset = dataset.map(lambda x: suppress_bad_kps(x, thresh=SUPPRESS_KP_CONF_THRESH))
+            dataset = dataset.map(
+                lambda x: suppress_bad_kps(x, thresh=SUPPRESS_KP_CONF_THRESH)
+            )
         if SUPPRESS_BETAS_THRESH > 0:
-            dataset = dataset.map(lambda x: supress_bad_betas(x, thresh=SUPPRESS_BETAS_THRESH))
+            dataset = dataset.map(
+                lambda x: supress_bad_betas(x, thresh=SUPPRESS_BETAS_THRESH)
+            )
         if SUPPRESS_BAD_POSES:
             dataset = dataset.map(lambda x: supress_bad_poses(x))
         if POSES_BETAS_SIMULTANEOUS:
@@ -346,13 +416,23 @@ class ImageDataset(Dataset):
         if FILTER_NO_POSES:
             dataset = dataset.select(lambda x: filter_no_poses(x))
         if FILTER_NUM_KP > 0:
-            dataset = dataset.select(lambda x: filter_numkp(x, numkp=FILTER_NUM_KP, thresh=FILTER_NUM_KP_THRESH))
+            dataset = dataset.select(
+                lambda x: filter_numkp(
+                    x, numkp=FILTER_NUM_KP, thresh=FILTER_NUM_KP_THRESH
+                )
+            )
         if FILTER_REPROJ_THRESH > 0:
-            dataset = dataset.select(lambda x: filter_reproj_error(x, thresh=FILTER_REPROJ_THRESH))
+            dataset = dataset.select(
+                lambda x: filter_reproj_error(x, thresh=FILTER_REPROJ_THRESH)
+            )
         if FILTER_MIN_BBOX_SIZE > 0:
-            dataset = dataset.select(lambda x: filter_bbox_size(x, thresh=FILTER_MIN_BBOX_SIZE))
+            dataset = dataset.select(
+                lambda x: filter_bbox_size(x, thresh=FILTER_MIN_BBOX_SIZE)
+            )
         if BETAS_REG:
-            dataset = dataset.map(lambda x: set_betas_for_reg(x))  # NOTE: Must be at the end
+            dataset = dataset.map(
+                lambda x: set_betas_for_reg(x)
+            )  # NOTE: Must be at the end
 
         use_skimage_antialias = cfg.DATASETS.get("USE_SKIMAGE_ANTIALIAS", False)
         border_mode = {
@@ -411,20 +491,44 @@ class ImageDataset(Dataset):
         orig_keypoints_2d = keypoints_2d.copy()
         center_x = center[0]
         center_y = center[1]
-        bbox_size = expand_to_aspect_ratio(scale * 200, target_aspect_ratio=BBOX_SHAPE).max()
+        bbox_size = expand_to_aspect_ratio(
+            scale * 200, target_aspect_ratio=BBOX_SHAPE
+        ).max()
         if bbox_size < 1:
             breakpoint()
 
-        smpl_params = {"global_orient": body_pose[:3], "body_pose": body_pose[3:], "betas": betas}
+        smpl_params = {
+            "global_orient": body_pose[:3],
+            "body_pose": body_pose[3:],
+            "betas": betas,
+        }
 
-        has_smpl_params = {"global_orient": has_body_pose, "body_pose": has_body_pose, "betas": has_betas}
+        has_smpl_params = {
+            "global_orient": has_body_pose,
+            "body_pose": has_body_pose,
+            "betas": has_betas,
+        }
 
-        smpl_params_is_axis_angle = {"global_orient": True, "body_pose": True, "betas": False}
+        smpl_params_is_axis_angle = {
+            "global_orient": True,
+            "body_pose": True,
+            "betas": False,
+        }
 
         augm_config = copy.deepcopy(augm_config)
         # Crop image and (possibly) perform data augmentation
-        img_rgba = np.concatenate([image, mask.astype(np.uint8)[:, :, None] * 255], axis=2)
-        img_patch_rgba, keypoints_2d, keypoints_3d, smpl_params, has_smpl_params, img_size, trans = get_example(
+        img_rgba = np.concatenate(
+            [image, mask.astype(np.uint8)[:, :, None] * 255], axis=2
+        )
+        (
+            img_patch_rgba,
+            keypoints_2d,
+            keypoints_3d,
+            smpl_params,
+            has_smpl_params,
+            img_size,
+            trans,
+        ) = get_example(
             img_rgba,
             center_x,
             center_y,

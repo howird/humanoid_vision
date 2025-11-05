@@ -1,12 +1,11 @@
 import os
-from typing import Dict
 from yacs.config import CfgNode as CN
 
 CACHE_DIR = os.path.join(os.environ.get("HOME"), ".cache")
 CACHE_DIR_4DHUMANS = os.path.join(CACHE_DIR, "4DHumans")
 
 
-def to_lower(x: Dict) -> Dict:
+def to_lower(x: dict) -> dict:
     """
     Convert all dictionary keys to lowercase
     Args:
@@ -93,7 +92,9 @@ def dataset_eval_config() -> CN:
     return dataset_config("datasets_eval.yaml")
 
 
-def get_config(config_file: str, merge: bool = True, update_cachedir: bool = False) -> CN:
+def get_config(
+    config_file: str, merge: bool = True, update_cachedir: bool = False
+) -> CN:
     """
     Read a config file and optionally merge it with the default config file.
     Args:

@@ -1,6 +1,5 @@
 import copy
 
-from typing import Optional
 from pathlib import Path
 
 import cv2
@@ -17,7 +16,11 @@ from pycocotools import mask as mask_utils
 from humanoid_vision.configs.base import RenderConfig
 from humanoid_vision.common.smpl_output import HMRSMPLOutput
 from humanoid_vision.models.smpl_wrapper import SMPL
-from humanoid_vision.utils.utils import get_colors, numpy_to_torch_image, perspective_projection
+from humanoid_vision.utils.utils import (
+    get_colors,
+    numpy_to_torch_image,
+    perspective_projection,
+)
 from humanoid_vision.visualize.py_renderer import Renderer
 
 
@@ -28,7 +31,13 @@ def rect_with_opacity(image, top_left, bottom_right, fill_color, fill_opacity):
 
 
 class Visualizer(nn.Module):
-    def __init__(self, cfg: RenderConfig, smpl: SMPL, focal_length: int, texture_path: Optional[Path] = None):
+    def __init__(
+        self,
+        cfg: RenderConfig,
+        smpl: SMPL,
+        focal_length: int,
+        texture_path: Path | None = None,
+    ):
         super(Visualizer, self).__init__()
 
         self.cfg = cfg
@@ -38,14 +47,18 @@ class Visualizer(nn.Module):
         self.smpl = smpl
 
         if not self.cfg.head_mask:
-            assert texture_path is not None, "texture_path must be provided if RenderConfig.head_mask is false"
+            assert (
+                texture_path is not None
+            ), "texture_path must be provided if RenderConfig.head_mask is false"
             texture_file = np.load(texture_path)
             self.faces_cpu = texture_file["smpl_faces"].astype("uint32")
         else:
             texture_file = np.load(self.cfg.head_mask_path)
             self.faces_cpu = texture_file.astype("uint32")
 
-        self.render = Renderer(focal_length=self.focal_length, img_res=256, faces=self.faces_cpu)
+        self.render = Renderer(
+            focal_length=self.focal_length, img_res=256, faces=self.faces_cpu
+        )
         self.render_size = 256
 
         self.colors = get_colors(pallette=self.cfg.colors)
@@ -71,9 +84,19 @@ class Visualizer(nn.Module):
         )
         self.render_size = image_size
 
-    def render_single_frame(self, pred_smpl_params, pred_cam_t, color, img_size=256, image=None, use_image=False):
+    def render_single_frame(
+        self,
+        pred_smpl_params,
+        pred_cam_t,
+        color,
+        img_size=256,
+        image=None,
+        use_image=False,
+    ):
         pred_smpl_params = default_collate(pred_smpl_params)
-        smpl_output = self.smpl(HMRSMPLOutput(**{k: v.float().cuda() for k, v in pred_smpl_params.items()}))
+        smpl_output = self.smpl(
+            HMRSMPLOutput(**{k: v.float().cuda() for k, v in pred_smpl_params.items()})
+        )
         pred_vertices = smpl_output.vertices.cpu()
 
         # a1 = pred_vertices[0, :, 2]>0.1
@@ -89,7 +112,11 @@ class Visualizer(nn.Module):
         pred_cam_t_bs = pred_cam_t.unsqueeze(1).repeat(1, pred_vertices.size(1), 1)
 
         rgb_from_pred, validmask = self.render.visualize_all(
-            pred_vertices.numpy(), pred_cam_t_bs.cpu().numpy(), color, image, use_image=use_image
+            pred_vertices.numpy(),
+            pred_cam_t_bs.cpu().numpy(),
+            color,
+            image,
+            use_image=use_image,
         )
 
         return rgb_from_pred, validmask
@@ -109,7 +136,16 @@ class Visualizer(nn.Module):
         # draw text on top of mask
         image = rect_with_opacity(image, back_tl, back_br, bg_color, 0.6)
 
-        cv2.putText(image, text, txt_tl, cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), 1, cv2.LINE_AA)
+        cv2.putText(
+            image,
+            text,
+            txt_tl,
+            cv2.FONT_HERSHEY_SIMPLEX,
+            font_scale,
+            (0, 0, 0),
+            1,
+            cv2.LINE_AA,
+        )
 
         return image
 
@@ -164,43 +200,77 @@ class Visualizer(nn.Module):
             if isinstance(border_color, np.ndarray):
                 border_color = border_color.tolist()
 
-            contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            contours, _ = cv2.findContours(
+                mask.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
+            )
 
             if border_alpha < 1:
                 with_border = image.copy()
-                cv2.drawContours(with_border, contours, -1, border_color, border_thick, cv2.LINE_AA)
+                cv2.drawContours(
+                    with_border, contours, -1, border_color, border_thick, cv2.LINE_AA
+                )
                 image = (1 - border_alpha) * image + border_alpha * with_border
             else:
-                cv2.drawContours(image, contours, -1, border_color, border_thick, cv2.LINE_AA)
+                cv2.drawContours(
+                    image, contours, -1, border_color, border_thick, cv2.LINE_AA
+                )
 
         image = self.draw_text(image, text, [bbox[0], bbox[1]])
 
         return image.astype(np.uint8)
 
-    def visualize_labels_bbox(self, image, labels, bbox, color, track_ids, tracked_smpl, tracked_camera):
+    def visualize_labels_bbox(
+        self, image, labels, bbox, color, track_ids, tracked_smpl, tracked_camera
+    ):
         # convert to numpy
         grid_img = make_grid(image, nrow=10)
         grid_img = grid_img[[2, 1, 0], :, :]
-        ndarr = grid_img.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to("cpu", torch.uint8).numpy()
-        cv_ndarr = cv2.resize(ndarr, ndarr.shape[:2][::-1], interpolation=cv2.INTER_NEAREST)
+        ndarr = (
+            grid_img.mul(255)
+            .add_(0.5)
+            .clamp_(0, 255)
+            .permute(1, 2, 0)
+            .to("cpu", torch.uint8)
+            .numpy()
+        )
+        cv_ndarr = cv2.resize(
+            ndarr, ndarr.shape[:2][::-1], interpolation=cv2.INTER_NEAREST
+        )
 
         # draw bounding boxes and print labels
         for i, box in enumerate(bbox):
             cv_color = np.array([color[i][2], color[i][1], color[i][0]]) * 255
             cv2.rectangle(
-                cv_ndarr, (int(box[0]), int(box[1])), (int(box[0] + box[2]), int(box[1] + box[3])), cv_color, 2
+                cv_ndarr,
+                (int(box[0]), int(box[1])),
+                (int(box[0] + box[2]), int(box[1] + box[3])),
+                cv_color,
+                2,
             )
             for j, label in enumerate(labels[track_ids[i]][::-1]):
-                cv_ndarr = self.draw_text(cv_ndarr, label, [box[0], box[1] - (j + 1) * 20])
+                cv_ndarr = self.draw_text(
+                    cv_ndarr, label, [box[0], box[1] - (j + 1) * 20]
+                )
 
         return numpy_to_torch_image(cv_ndarr) / 255.0
 
-    def visualize_labels_arrow(self, image, labels, bbox, color, track_ids, tracked_smpl, tracked_camera):
+    def visualize_labels_arrow(
+        self, image, labels, bbox, color, track_ids, tracked_smpl, tracked_camera
+    ):
         # convert to numpy
         grid_img = make_grid(image, nrow=10)
         grid_img = grid_img[[2, 1, 0], :, :]
-        ndarr = grid_img.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to("cpu", torch.uint8).numpy()
-        cv_ndarr = cv2.resize(ndarr, ndarr.shape[:2][::-1], interpolation=cv2.INTER_NEAREST)
+        ndarr = (
+            grid_img.mul(255)
+            .add_(0.5)
+            .clamp_(0, 255)
+            .permute(1, 2, 0)
+            .to("cpu", torch.uint8)
+            .numpy()
+        )
+        cv_ndarr = cv2.resize(
+            ndarr, ndarr.shape[:2][::-1], interpolation=cv2.INTER_NEAREST
+        )
 
         # show labels on the top near head.
         img_w, img_h = cv_ndarr.shape[1], cv_ndarr.shape[0]
@@ -209,7 +279,9 @@ class Visualizer(nn.Module):
             return numpy_to_torch_image(cv_ndarr) / 255.0
 
         tracked_smpl = default_collate(tracked_smpl)
-        smpl_output = self.smpl(**{k: v.float().cuda() for k, v in tracked_smpl.items()}, pose2rot=False)
+        smpl_output = self.smpl(
+            **{k: v.float().cuda() for k, v in tracked_smpl.items()}, pose2rot=False
+        )
         pred_joints = smpl_output.joints
         # pred_joints = smpl_output.vertices
         # # randomly choose 200 vertices
@@ -221,8 +293,12 @@ class Visualizer(nn.Module):
         # self.c+=1
         # pred_joints = pred_joints[:, self.a1, :]
         batch_size = pred_joints.shape[0]
-        camera_center = torch.zeros(batch_size, 2, device=self.device, dtype=pred_joints.dtype)
-        focal_length = self.focal_length * torch.ones(batch_size, 2, device=self.device, dtype=pred_joints.dtype)
+        camera_center = torch.zeros(
+            batch_size, 2, device=self.device, dtype=pred_joints.dtype
+        )
+        focal_length = self.focal_length * torch.ones(
+            batch_size, 2, device=self.device, dtype=pred_joints.dtype
+        )
         pred_keypoints_2d_smpl = perspective_projection(
             pred_joints,
             rotation=torch.eye(
@@ -245,7 +321,9 @@ class Visualizer(nn.Module):
             for i, box in enumerate(bbox):
                 cv_color = np.array([color[i][2], color[i][1], color[i][0]]) * 255
                 for j, keypoint in enumerate(pred_keypoints_2d_smpl[i]):
-                    cv2.circle(cv_ndarr, (int(keypoint[0]), int(keypoint[1])), 2, cv_color, 2)
+                    cv2.circle(
+                        cv_ndarr, (int(keypoint[0]), int(keypoint[1])), 2, cv_color, 2
+                    )
                     cv2.putText(
                         cv_ndarr,
                         str(j),
@@ -265,23 +343,34 @@ class Visualizer(nn.Module):
             v_head_norm = v_head_norm.cpu().numpy()
 
             # draw line from head to 10% of the norm
-            line_start = pred_keypoints_2d_smpl[i][43].cpu().numpy() + v_head_norm * 0.1 * np.linalg.norm(
-                v_head.cpu().numpy()
-            )
-            line_end = pred_keypoints_2d_smpl[i][43].cpu().numpy() + v_head_norm * 0.2 * np.linalg.norm(
-                v_head.cpu().numpy()
-            )
+            line_start = pred_keypoints_2d_smpl[i][
+                43
+            ].cpu().numpy() + v_head_norm * 0.1 * np.linalg.norm(v_head.cpu().numpy())
+            line_end = pred_keypoints_2d_smpl[i][
+                43
+            ].cpu().numpy() + v_head_norm * 0.2 * np.linalg.norm(v_head.cpu().numpy())
             cv2.line(
-                cv_ndarr, (int(line_start[0]), int(line_start[1])), (int(line_end[0]), int(line_end[1])), cv_color, 2
+                cv_ndarr,
+                (int(line_start[0]), int(line_start[1])),
+                (int(line_end[0]), int(line_end[1])),
+                cv_color,
+                2,
             )
 
             # draw text
             for j, label in enumerate(labels[track_ids[i]][::-1]):
-                cv_ndarr = self.draw_text(cv_ndarr, label, [line_end[0] - 50, line_end[1] - (j + 1) * 20], cv_color)
+                cv_ndarr = self.draw_text(
+                    cv_ndarr,
+                    label,
+                    [line_end[0] - 50, line_end[1] - (j + 1) * 20],
+                    cv_color,
+                )
 
         return numpy_to_torch_image(cv_ndarr) / 255.0
 
-    def tile_texture(self, image_padded, uv_maps, tracked_ids_x, img_height, img_width, top, left):
+    def tile_texture(
+        self, image_padded, uv_maps, tracked_ids_x, img_height, img_width, top, left
+    ):
         rendered_image_tex = numpy_to_torch_image(np.array(image_padded) / 255.0) * 0.0
         try:
             mask_valid = np.load("_DATA/fmap_256.npy")
@@ -297,12 +386,20 @@ class Visualizer(nn.Module):
                 uv_y0 = (img_width // 4) * (i_ % 4) + left
                 uv_y1 = (img_width // 4) * (i_ % 4) + (img_width // 4) + left
                 uvmap_x = uv_maps[i_].unsqueeze(0) * 5.0
-                uvmap_x = uvmap_x * torch.tensor([0.229, 0.224, 0.225], device="cuda").reshape(1, 3, 1, 1)
-                uvmap_x = uvmap_x + torch.tensor([0.485, 0.456, 0.406], device="cuda").reshape(1, 3, 1, 1)
+                uvmap_x = uvmap_x * torch.tensor(
+                    [0.229, 0.224, 0.225], device="cuda"
+                ).reshape(1, 3, 1, 1)
+                uvmap_x = uvmap_x + torch.tensor(
+                    [0.485, 0.456, 0.406], device="cuda"
+                ).reshape(1, 3, 1, 1)
                 uvmap_x[:, :, mask_valid_] = 1
-                uvmap_x_ = F.interpolate(uvmap_x, size=(img_height // 2, img_width // 4))
+                uvmap_x_ = F.interpolate(
+                    uvmap_x, size=(img_height // 2, img_width // 4)
+                )
                 rendered_image_tex[0, :, uv_x0:uv_x1, uv_y0:uv_y1] = uvmap_x_[0]
-            rendered_image_tex = rendered_image_tex[:, :, top : top + img_height, left : left + img_width]
+            rendered_image_tex = rendered_image_tex[
+                :, :, top : top + img_height, left : left + img_width
+            ]
             rendered_image_tex = rendered_image_tex[:, [2, 1, 0], :, :]
         except:
             pass
@@ -370,17 +467,35 @@ class Visualizer(nn.Module):
 
         delta_w = new_image_size - img_width
         delta_h = new_image_size - img_height
-        top, bottom, left, right = delta_h // 2, delta_h - (delta_h // 2), delta_w // 2, delta_w - (delta_w // 2)
-        top_, bottom_, left_, right_ = int(top * ratio_), int(bottom * ratio_), int(left * ratio_), int(right * ratio_)
+        top, bottom, left, right = (
+            delta_h // 2,
+            delta_h - (delta_h // 2),
+            delta_w // 2,
+            delta_w - (delta_w // 2),
+        )
+        top_, bottom_, left_, right_ = (
+            int(top * ratio_),
+            int(bottom * ratio_),
+            int(left * ratio_),
+            int(right * ratio_),
+        )
         img_height_, img_width_ = int(img_height * ratio_), int(img_width * ratio_)
 
-        image_padded = cv2.copyMakeBorder(cv_image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=[0, 0, 0])
+        image_padded = cv2.copyMakeBorder(
+            cv_image, top, bottom, left, right, cv2.BORDER_CONSTANT, value=[0, 0, 0]
+        )
         image_resized = cv2.resize(
             image_padded,
-            (self.cfg.res * self.cfg.up_scale_factor, self.cfg.res * self.cfg.up_scale_factor),
+            (
+                self.cfg.res * self.cfg.up_scale_factor,
+                self.cfg.res * self.cfg.up_scale_factor,
+            ),
         )
         scale_ = self.cfg.output_resolution / img_width
-        frame_size = (self.cfg.output_resolution * NUM_PANELS, int(img_height * (scale_)))
+        frame_size = (
+            self.cfg.output_resolution * NUM_PANELS,
+            int(img_height * (scale_)),
+        )
         image_resized_rgb = numpy_to_torch_image(np.array(image_resized) / 255.0)
 
         if len(tracked_ids) > 0:
@@ -396,7 +511,8 @@ class Visualizer(nn.Module):
             elif "TRACKID" in self.cfg.type:
                 ids_x = np.logical_and(
                     tracked_time == 0,
-                    np.array(tracked_ids) == int(self.cfg.type.split("TRACKID_")[1].split("_")[0]),
+                    np.array(tracked_ids)
+                    == int(self.cfg.type.split("TRACKID_")[1].split("_")[0]),
                 )
             elif "GHOST" in self.cfg.type:
                 ids_x = tracked_time <= 0
@@ -427,13 +543,18 @@ class Visualizer(nn.Module):
                         use_image=True,
                     )
 
-                    rendered_image_final = numpy_to_torch_image(np.array(rendered_image_final))
+                    rendered_image_final = numpy_to_torch_image(
+                        np.array(rendered_image_final)
+                    )
 
                     valid_mask = np.repeat(valid_mask, 3, 2)
                     valid_mask = np.array(valid_mask, dtype=float)
                     valid_mask = numpy_to_torch_image(np.array(valid_mask))
 
-                    rendered_image_final = valid_mask * rendered_image_final + (1 - valid_mask) * image_resized_rgb
+                    rendered_image_final = (
+                        valid_mask * rendered_image_final
+                        + (1 - valid_mask) * image_resized_rgb
+                    )
                     rendered_image_final = rendered_image_final[
                         :, :, top_ : top_ + img_height_, left_ : left_ + img_width_
                     ]
@@ -451,13 +572,19 @@ class Visualizer(nn.Module):
                             color=np.array(self.colors[tr]),
                             text="track id : " + str(tr),
                         )
-                    rendered_image_final = numpy_to_torch_image(np.array(cv_image) / 255.0)
+                    rendered_image_final = numpy_to_torch_image(
+                        np.array(cv_image) / 255.0
+                    )
             else:
                 rendered_image_final = copy.deepcopy(image_resized_rgb)
-                rendered_image_final = rendered_image_final[:, :, top_ : top_ + img_height_, left_ : left_ + img_width_]
+                rendered_image_final = rendered_image_final[
+                    :, :, top_ : top_ + img_height_, left_ : left_ + img_width_
+                ]
         else:
             rendered_image_final = copy.deepcopy(image_resized_rgb)
-            rendered_image_final = rendered_image_final[:, :, top_ : top_ + img_height_, left_ : left_ + img_width_]
+            rendered_image_final = rendered_image_final[
+                :, :, top_ : top_ + img_height_, left_ : left_ + img_width_
+            ]
 
         # render additional labels if any
         if "label" in final_visuals_dic.keys():
@@ -474,21 +601,43 @@ class Visualizer(nn.Module):
 
         if PANEL_TEXTURE:
             rendered_image_tex = self.tile_texture(
-                image_resized, uv_maps, tracked_ids_x, img_height_, img_width_, top, left
+                image_resized,
+                uv_maps,
+                tracked_ids_x,
+                img_height_,
+                img_width_,
+                top,
+                left,
             )
             rendered_image_tex = F.interpolate(
-                rendered_image_tex, size=(rendered_image_final.shape[2], rendered_image_final.shape[3])
+                rendered_image_tex,
+                size=(rendered_image_final.shape[2], rendered_image_final.shape[3]),
             )
-            grid_img = make_grid(torch.cat([rendered_image_final, rendered_image_tex], 0), nrow=10)
+            grid_img = make_grid(
+                torch.cat([rendered_image_final, rendered_image_tex], 0), nrow=10
+            )
         else:
             grid_img = make_grid(rendered_image_final, nrow=10)
 
         grid_img = grid_img[[2, 1, 0], :, :]
-        ndarr = grid_img.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to("cpu", torch.uint8).numpy()
+        ndarr = (
+            grid_img.mul(255)
+            .add_(0.5)
+            .clamp_(0, 255)
+            .permute(1, 2, 0)
+            .to("cpu", torch.uint8)
+            .numpy()
+        )
         cv_ndarr = cv2.resize(ndarr, frame_size)
-        cv2.putText(cv_ndarr, str(t_), (20, 40), cv2.FONT_HERSHEY_TRIPLEX, 1, (0, 255, 255))
+        cv2.putText(
+            cv_ndarr, str(t_), (20, 40), cv2.FONT_HERSHEY_TRIPLEX, 1, (0, 255, 255)
+        )
         if shot_ == 1:
-            cv2.putText(cv_ndarr, "SHOT", (20, 80), cv2.FONT_HERSHEY_TRIPLEX, 1, (0, 255, 255))
-            cv2.rectangle(cv_ndarr, (0, 0), (frame_size[0], frame_size[1]), (0, 0, 255), 5)
+            cv2.putText(
+                cv_ndarr, "SHOT", (20, 80), cv2.FONT_HERSHEY_TRIPLEX, 1, (0, 255, 255)
+            )
+            cv2.rectangle(
+                cv_ndarr, (0, 0), (frame_size[0], frame_size[1]), (0, 0, 255), 5
+            )
 
         return cv_ndarr, frame_size

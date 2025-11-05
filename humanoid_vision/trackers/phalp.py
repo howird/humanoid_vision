@@ -3,8 +3,6 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from pathlib import Path
-from typing import Dict, List
-
 import cv2
 import joblib
 import numpy as np
@@ -66,7 +64,7 @@ class PHALP(nn.Module):
         self.to(self.device)
         self.train() if (self.cfg.train) else self.eval()
 
-    def track(self, video_name: str, list_of_frames: List[Path]) -> Dict:
+    def track(self, video_name: str, list_of_frames: list[Path]) -> dict:
         # TODO(howird): this key stuff is terrible design figure out how to improve this.
         eval_keys = ["tracked_ids", "tracked_bbox", "tid", "bbox", "tracked_time"]
         history_keys = (
@@ -252,6 +250,7 @@ class PHALP(nn.Module):
         pred_scores = instances.scores.cpu().numpy()
         pred_classes = instances.pred_classes.cpu().numpy()
 
+        # dummy
         ground_truth_track_id = [1 for _ in range(len(pred_scores))]
         ground_truth_annotations = [[] for _ in range(len(pred_scores))]
 
@@ -285,7 +284,7 @@ class PHALP(nn.Module):
         measurments,
         gt,
         ann,
-    ) -> List[Detection]:
+    ) -> list[Detection]:
         num_detected_persons = len(score)
         if num_detected_persons == 0:
             log.warning(f"No people found in {frame_name}.")
@@ -352,17 +351,16 @@ class PHALP(nn.Module):
             ]
 
             if self.cfg.phalp.pose_distance == "joints":
-                pose_embedding = pred_joints.cpu().view(num_valid_persons, -1)
-            elif self.cfg.phalp.pose_distance == "smpl":
-                pose_embedding = []
-                for i in range(num_valid_persons):
-                    pose_embedding_ = smpl_to_pose_camera_vector(
-                        pred_smpl_params[i], pred_cam[i]
-                    )
-                    pose_embedding.append(torch.from_numpy(pose_embedding_[0]))
-                pose_embedding = torch.stack(pose_embedding, dim=0)
-            else:
                 raise ValueError("Unknown pose distance")
+
+            pose_embedding = []
+            for i in range(num_valid_persons):
+                pose_embedding_ = smpl_to_pose_camera_vector(
+                    pred_smpl_params[i], pred_cam[i]
+                )
+                pose_embedding.append(torch.from_numpy(pose_embedding_[0]))
+            pose_embedding = torch.stack(pose_embedding, dim=0)
+
             pred_joints_2d_ = (
                 pred_joints_2d.reshape(num_valid_persons, -1) / self.cfg.render.res
             )
@@ -380,52 +378,57 @@ class PHALP(nn.Module):
         )
 
         detection_data_list = []
+        hmar_out_cam_flat = hmar_out.pred_cam.view(num_valid_persons, -1).cpu().numpy()
+        hmar_out_cam_t_flat = (
+            hmar_out.pred_cam_t.view(num_valid_persons, -1).cpu().numpy()
+        )
+        hmar_out_focal_flat = (
+            hmar_out.focal_length.view(num_valid_persons, -1).cpu().numpy()
+        )
+
+        full_embedding_np = full_embedding.cpu().numpy()
+
         for i, p_ in enumerate(selected_ids):
-            detection_data = {
-                "bbox": np.array(
+            detection = Detection(
+                bbox=np.array(
                     [
                         bbox[p_][0],
                         bbox[p_][1],
                         (bbox[p_][2] - bbox[p_][0]),
                         (bbox[p_][3] - bbox[p_][1]),
-                    ]
+                    ],
+                    dtype=np.float32,
                 ),
-                "mask": rles_list[i],
-                "conf": score[p_],
-                "appe": appe_embedding[i].cpu().numpy(),
-                "pose": pose_embedding[i].numpy(),
-                "loca": loca_embedding[i].cpu().numpy(),
-                "uv": uv_vector[i].cpu().numpy(),
-                "embedding": full_embedding[i],
-                "center": center_list[i],
-                "scale": scale_list[i],
-                "smpl": pred_smpl_params[i],
-                "camera": pred_cam_[i].cpu().numpy(),
-                "camera_bbox": hmar_out.pred_cam[i].cpu().numpy(),
-                "3d_joints": pred_joints[i].cpu().numpy(),
-                "2d_joints": pred_joints_2d_[i].cpu().numpy(),
-                "size": [img_height, img_width],
-                "img_path": frame_name,
-                "img_name": frame_name.split("/")[-1]
-                if isinstance(frame_name, str)
-                else None,
-                "class_name": cls_id[p_],
-                "time": t,
-                "ground_truth": gt[p_],
-                "annotations": ann[p_],
-                "hmar_out_cam": hmar_out.pred_cam.view(num_valid_persons, -1)
-                .cpu()
-                .numpy(),
-                "hmar_out_cam_t": hmar_out.pred_cam_t.view(num_valid_persons, -1)
-                .cpu()
-                .numpy(),
-                "hmar_out_focal_length": hmar_out.focal_length.view(
-                    num_valid_persons, -1
-                )
-                .cpu()
-                .numpy(),
-            }
-            detection_data_list.append(Detection(detection_data))
+                mask=rles_list[i],
+                conf=float(score[p_]),
+                appe=appe_embedding[i].cpu().numpy(),
+                pose=pose_embedding[i].cpu().numpy(),
+                loca=loca_embedding[i].cpu().numpy(),
+                uv=uv_vector[i].cpu().numpy(),
+                embedding=full_embedding_np[i],
+                center=center_list[i],
+                scale=scale_list[i],
+                smpl=pred_smpl_params[i],
+                camera=pred_cam_[i].cpu().numpy(),
+                camera_bbox=hmar_out.pred_cam[i].cpu().numpy(),
+                joints_3d=pred_joints[i].cpu().numpy(),
+                joints_2d=pred_joints_2d_[i].cpu().numpy(),
+                size=[img_height, img_width],
+                img_path=frame_name,
+                img_name=(
+                    frame_name.split("/")[-1]
+                    if isinstance(frame_name, str)
+                    else getattr(frame_name, "name", None)
+                ),
+                class_name=int(cls_id[p_]),
+                time=int(t),
+                ground_truth=gt[p_],
+                annotations=ann[p_],
+                hmar_out_cam=hmar_out_cam_flat[i],
+                hmar_out_cam_t=hmar_out_cam_t_flat[i],
+                hmar_out_focal_length=hmar_out_focal_flat[i],
+            )
+            detection_data_list.append(detection)
 
         return detection_data_list
 

@@ -9,19 +9,26 @@ from skimage.transform import rotate, resize
 from skimage.filters import gaussian
 import random
 import cv2
-from typing import List, Dict, Tuple, Union
 from yacs.config import CfgNode
+from jaxtyping import Float, jaxtyped
+from beartype import beartype
+
+from humanoid_vision.common.types import BBoxArray
 
 
-def expand_to_aspect_ratio(input_shape, target_aspect_ratio=None):
+@jaxtyped(typechecker=beartype)
+def expand_to_aspect_ratio(
+    input_shape: Float[np.ndarray, "2"] | tuple[float, float],
+    target_aspect_ratio: tuple[int, int] | None = None,
+) -> Float[np.ndarray, "2"]:
     """Increase the size of the bounding box to match the target shape."""
     if target_aspect_ratio is None:
-        return input_shape
+        return np.asarray(input_shape, dtype=np.float32)
 
     try:
         w, h = input_shape
     except (ValueError, TypeError):
-        return input_shape
+        return np.asarray(input_shape, dtype=np.float32)
 
     w_t, h_t = target_aspect_ratio
     if h / w < h_t / w_t:
@@ -32,11 +39,15 @@ def expand_to_aspect_ratio(input_shape, target_aspect_ratio=None):
         w_new = max(h * w_t / h_t, w)
     if h_new < h or w_new < w:
         breakpoint()
-    return np.array([w_new, h_new])
+    return np.array([w_new, h_new], dtype=np.float32)
 
 
-def expand_bbox_to_aspect_ratio(bbox, target_aspect_ratio=None):
-    # bbox: np.array: (N,4) detectron2 bbox format
+@jaxtyped(typechecker=beartype)
+def expand_bbox_to_aspect_ratio(
+    bbox: BBoxArray,
+    target_aspect_ratio: tuple[int, int] | None = None,
+) -> BBoxArray:
+    # bbox: np.ndarray: (N,4) detectron2 bbox format
     # target_aspect_ratio: (width, height)
     if target_aspect_ratio is None:
         return bbox
@@ -46,9 +57,13 @@ def expand_bbox_to_aspect_ratio(bbox, target_aspect_ratio=None):
         bbox = bbox[None, :]
 
     if bbox.shape[0] > 0:
-        center = np.stack(((bbox[:, 0] + bbox[:, 2]) / 2, (bbox[:, 1] + bbox[:, 3]) / 2), axis=1)
+        center = np.stack(
+            ((bbox[:, 0] + bbox[:, 2]) / 2, (bbox[:, 1] + bbox[:, 3]) / 2), axis=1
+        )
         scale_wh = np.stack((bbox[:, 2] - bbox[:, 0], bbox[:, 3] - bbox[:, 1]), axis=1)
-        scale_wh = np.stack([expand_to_aspect_ratio(wh, target_aspect_ratio) for wh in scale_wh], axis=0)
+        scale_wh = np.stack(
+            [expand_to_aspect_ratio(wh, target_aspect_ratio) for wh in scale_wh], axis=0
+        )
         bbox = np.stack(
             [
                 center[:, 0] - scale_wh[:, 0] / 2,
@@ -65,7 +80,7 @@ def expand_bbox_to_aspect_ratio(bbox, target_aspect_ratio=None):
     return bbox
 
 
-def do_augmentation(aug_config: CfgNode) -> Tuple:
+def do_augmentation(aug_config: CfgNode) -> tuple:
     """
     Compute random augmentation parameters.
     Args:
@@ -75,7 +90,7 @@ def do_augmentation(aug_config: CfgNode) -> Tuple:
         rot (float): Random image rotation.
         do_flip (bool): Whether to flip image or not.
         do_extreme_crop (bool): Whether to apply extreme cropping (as proposed in EFT).
-        color_scale (List): Color rescaling factor
+        color_scale (list): Color rescaling factor
         tx (float): Random translation along the x axis.
         ty (float): Random translation along the y axis.
     """
@@ -94,11 +109,15 @@ def do_augmentation(aug_config: CfgNode) -> Tuple:
     # extreme_crop_lvl = 0
     c_up = 1.0 + aug_config.COLOR_SCALE
     c_low = 1.0 - aug_config.COLOR_SCALE
-    color_scale = [random.uniform(c_low, c_up), random.uniform(c_low, c_up), random.uniform(c_low, c_up)]
+    color_scale = [
+        random.uniform(c_low, c_up),
+        random.uniform(c_low, c_up),
+        random.uniform(c_low, c_up),
+    ]
     return scale, rot, do_flip, do_extreme_crop, extreme_crop_lvl, color_scale, tx, ty
 
 
-def rotate_2d(pt_2d: np.array, rot_rad: float) -> np.array:
+def rotate_2d(pt_2d: np.ndarray, rot_rad: float) -> np.ndarray:
     """
     Rotate a 2D point on the x-y plane.
     Args:
@@ -124,7 +143,7 @@ def gen_trans_from_patch_cv(
     dst_height: float,
     scale: float,
     rot: float,
-) -> np.array:
+) -> np.ndarray:
     """
     Create transformation matrix for the bounding box crop.
     Args:
@@ -171,7 +190,7 @@ def gen_trans_from_patch_cv(
     return trans
 
 
-def trans_point2d(pt_2d: np.array, trans: np.array):
+def trans_point2d(pt_2d: np.ndarray, trans: np.ndarray):
     """
     Transform a 2D point using translation matrix trans.
     Args:
@@ -231,7 +250,9 @@ def crop_img(img, ul, br, border_mode=cv2.BORDER_CONSTANT, border_value=0):
     c_y = (ul[1] + br[1]) / 2
     bb_width = patch_width = br[0] - ul[0]
     bb_height = patch_height = br[1] - ul[1]
-    trans = gen_trans_from_patch_cv(c_x, c_y, bb_width, bb_height, patch_width, patch_height, 1.0, 0)
+    trans = gen_trans_from_patch_cv(
+        c_x, c_y, bb_width, bb_height, patch_width, patch_height, 1.0, 0
+    )
     img_patch = cv2.warpAffine(
         img,
         trans,
@@ -255,7 +276,7 @@ def crop_img(img, ul, br, border_mode=cv2.BORDER_CONSTANT, border_value=0):
 
 
 def generate_image_patch_skimage(
-    img: np.array,
+    img: np.ndarray,
     c_x: float,
     c_y: float,
     bb_width: float,
@@ -267,7 +288,7 @@ def generate_image_patch_skimage(
     rot: float,
     border_mode=cv2.BORDER_CONSTANT,
     border_value=0,
-) -> Tuple[np.array, np.array]:
+) -> tuple[np.array, np.array]:
     """
     Crop image according to the supplied bounding box.
     Args:
@@ -291,7 +312,9 @@ def generate_image_patch_skimage(
         img = img[:, ::-1, :]
         c_x = img_width - c_x - 1
 
-    trans = gen_trans_from_patch_cv(c_x, c_y, bb_width, bb_height, patch_width, patch_height, scale, rot)
+    trans = gen_trans_from_patch_cv(
+        c_x, c_y, bb_width, bb_height, patch_width, patch_height, scale, rot
+    )
 
     # img_patch = cv2.warpAffine(img, trans, (int(patch_width), int(patch_height)), flags=cv2.INTER_LINEAR)
 
@@ -311,7 +334,14 @@ def generate_image_patch_skimage(
     # Upper left point
     ul = np.array(transform([1, 1], center, scale1, res, invert=1, as_int=False)) - 1
     # Bottom right point
-    br = np.array(transform([res[0] + 1, res[1] + 1], center, scale1, res, invert=1, as_int=False)) - 1
+    br = (
+        np.array(
+            transform(
+                [res[0] + 1, res[1] + 1], center, scale1, res, invert=1, as_int=False
+            )
+        )
+        - 1
+    )
 
     # Padding so that when rotated proper amount of context is included
     try:
@@ -337,10 +367,14 @@ def generate_image_patch_skimage(
         # Range to sample from original image
         old_x = max(0, ul_int[0]), min(len(img[0]), br_int[0])
         old_y = max(0, ul_int[1]), min(len(img), br_int[1])
-        new_img[new_y[0] : new_y[1], new_x[0] : new_x[1]] = img[old_y[0] : old_y[1], old_x[0] : old_x[1]]
+        new_img[new_y[0] : new_y[1], new_x[0] : new_x[1]] = img[
+            old_y[0] : old_y[1], old_x[0] : old_x[1]
+        ]
 
     # New way of cropping image
-    new_img = crop_img(img, ul, br, border_mode=border_mode, border_value=border_value).astype(np.float32)
+    new_img = crop_img(
+        img, ul, br, border_mode=border_mode, border_value=border_value
+    ).astype(np.float32)
 
     # print(f'{new_img.shape=}')
     # print(f'{new_img1.shape=}')
@@ -372,7 +406,7 @@ def generate_image_patch_skimage(
 
 
 def generate_image_patch_cv2(
-    img: np.array,
+    img: np.ndarray,
     c_x: float,
     c_y: float,
     bb_width: float,
@@ -384,7 +418,7 @@ def generate_image_patch_cv2(
     rot: float,
     border_mode=cv2.BORDER_CONSTANT,
     border_value=0,
-) -> Tuple[np.array, np.array]:
+) -> tuple[np.array, np.array]:
     """
     Crop the input image and return the crop and the corresponding transformation matrix.
     Args:
@@ -408,7 +442,9 @@ def generate_image_patch_cv2(
         img = img[:, ::-1, :]
         c_x = img_width - c_x - 1
 
-    trans = gen_trans_from_patch_cv(c_x, c_y, bb_width, bb_height, patch_width, patch_height, scale, rot)
+    trans = gen_trans_from_patch_cv(
+        c_x, c_y, bb_width, bb_height, patch_width, patch_height, scale, rot
+    )
 
     img_patch = cv2.warpAffine(
         img,
@@ -431,7 +467,7 @@ def generate_image_patch_cv2(
     return img_patch, trans
 
 
-def convert_cvimg_to_tensor(cvimg: np.array):
+def convert_cvimg_to_tensor(cvimg: np.ndarray):
     """
     Convert image from HWC to CHW format.
     Args:
@@ -447,14 +483,14 @@ def convert_cvimg_to_tensor(cvimg: np.array):
     return img
 
 
-def fliplr_params(smpl_params: Dict, has_smpl_params: Dict) -> Tuple[Dict, Dict]:
+def fliplr_params(smpl_params: dict, has_smpl_params: dict) -> tuple[dict, dict]:
     """
     Flip SMPL parameters when flipping the image.
     Args:
-        smpl_params (Dict): SMPL parameter annotations.
-        has_smpl_params (Dict): Whether SMPL annotations are valid.
+        smpl_params (dict): SMPL parameter annotations.
+        has_smpl_params (dict): Whether SMPL annotations are valid.
     Returns:
-        Dict, Dict: Flipped SMPL parameters and valid flags.
+        dict, dict: Flipped SMPL parameters and valid flags.
     """
     global_orient = smpl_params["global_orient"].copy()
     body_pose = smpl_params["body_pose"].copy()
@@ -550,17 +586,23 @@ def fliplr_params(smpl_params: Dict, has_smpl_params: Dict) -> Tuple[Dict, Dict]
         "betas": betas.astype(np.float32),
     }
 
-    has_smpl_params = {"global_orient": has_global_orient, "body_pose": has_body_pose, "betas": has_betas}
+    has_smpl_params = {
+        "global_orient": has_global_orient,
+        "body_pose": has_body_pose,
+        "betas": has_betas,
+    }
 
     return smpl_params, has_smpl_params
 
 
-def fliplr_keypoints(joints: np.array, width: float, flip_permutation: List[int]) -> np.array:
+def fliplr_keypoints(
+    joints: np.ndarray, width: float, flip_permutation: list[int]
+) -> np.ndarray:
     """
     Flip 2D or 3D keypoints.
     Args:
         joints (np.array): Array of shape (N, 3) or (N, 4) containing 2D or 3D keypoint locations and confidence.
-        flip_permutation (List): Permutation to apply after flipping.
+        flip_permutation (list): Permutation to apply after flipping.
     Returns:
         np.array: Flipped 2D or 3D keypoints with shape (N, 3) or (N, 4) respectively.
     """
@@ -572,12 +614,14 @@ def fliplr_keypoints(joints: np.array, width: float, flip_permutation: List[int]
     return joints
 
 
-def keypoint_3d_processing(keypoints_3d: np.array, flip_permutation: List[int], rot: float, do_flip: float) -> np.array:
+def keypoint_3d_processing(
+    keypoints_3d: np.ndarray, flip_permutation: list[int], rot: float, do_flip: float
+) -> np.ndarray:
     """
     Process 3D keypoints (rotation/flipping).
     Args:
         keypoints_3d (np.array): Input array of shape (N, 4) containing the 3D keypoints and confidence.
-        flip_permutation (List): Permutation to apply after flipping.
+        flip_permutation (list): Permutation to apply after flipping.
         rot (float): Random rotation applied to the keypoints.
         do_flip (bool): Whether to flip keypoints or not.
     Returns:
@@ -598,7 +642,7 @@ def keypoint_3d_processing(keypoints_3d: np.array, flip_permutation: List[int], 
     return keypoints_3d
 
 
-def rot_aa(aa: np.array, rot: float) -> np.array:
+def rot_aa(aa: np.ndarray, rot: float) -> np.ndarray:
     """
     Rotate axis angle parameters.
     Args:
@@ -623,16 +667,18 @@ def rot_aa(aa: np.array, rot: float) -> np.array:
     return aa.astype(np.float32)
 
 
-def smpl_param_processing(smpl_params: Dict, has_smpl_params: Dict, rot: float, do_flip: bool) -> Tuple[Dict, Dict]:
+def smpl_param_processing(
+    smpl_params: dict, has_smpl_params: dict, rot: float, do_flip: bool
+) -> tuple[dict, dict]:
     """
     Apply random augmentations to the SMPL parameters.
     Args:
-        smpl_params (Dict): SMPL parameter annotations.
-        has_smpl_params (Dict): Whether SMPL annotations are valid.
+        smpl_params (dict): SMPL parameter annotations.
+        has_smpl_params (dict): Whether SMPL annotations are valid.
         rot (float): Random rotation applied to the keypoints.
         do_flip (bool): Whether to flip keypoints or not.
     Returns:
-        Dict, Dict: Transformed SMPL parameters and valid flags.
+        dict, dict: Transformed SMPL parameters and valid flags.
     """
     if do_flip:
         smpl_params, has_smpl_params = fliplr_params(smpl_params, has_smpl_params)
@@ -641,27 +687,27 @@ def smpl_param_processing(smpl_params: Dict, has_smpl_params: Dict, rot: float, 
 
 
 def get_example(
-    img_path: Union[str, np.ndarray],
+    img_path: str | np.ndarray,
     center_x: float,
     center_y: float,
     width: float,
     height: float,
-    keypoints_2d: np.array,
-    keypoints_3d: np.array,
-    smpl_params: Dict,
-    has_smpl_params: Dict,
-    flip_kp_permutation: List[int],
+    keypoints_2d: np.ndarray,
+    keypoints_3d: np.ndarray,
+    smpl_params: dict,
+    has_smpl_params: dict,
+    flip_kp_permutation: list[int],
     patch_width: int,
     patch_height: int,
-    mean: np.array,
-    std: np.array,
+    mean: np.ndarray,
+    std: np.ndarray,
     do_augment: bool,
     augm_config: CfgNode,
     is_bgr: bool = True,
     use_skimage_antialias: bool = False,
     border_mode: int = cv2.BORDER_CONSTANT,
     return_trans: bool = False,
-) -> Tuple:
+) -> tuple:
     """
     Get an example from the dataset and (possibly) apply random augmentations.
     Args:
@@ -672,9 +718,9 @@ def get_example(
         height (float): Bounding box height.
         keypoints_2d (np.array): Array with shape (N,3) containing the 2D keypoints in the original image coordinates.
         keypoints_3d (np.array): Array with shape (N,4) containing the 3D keypoints.
-        smpl_params (Dict): SMPL parameter annotations.
-        has_smpl_params (Dict): Whether SMPL annotations are valid.
-        flip_kp_permutation (List): Permutation to apply to the keypoints after flipping.
+        smpl_params (dict): SMPL parameter annotations.
+        has_smpl_params (dict): Whether SMPL annotations are valid.
+        flip_kp_permutation (list): Permutation to apply to the keypoints after flipping.
         patch_width (float): Output box width.
         patch_height (float): Output box height.
         mean (np.array): Array of shape (3,) containing the mean for normalizing the input image.
@@ -686,8 +732,8 @@ def get_example(
         img_patch (np.array): Cropped image patch of shape (3, patch_height, patch_height)
         keypoints_2d (np.array): Array with shape (N,3) containing the transformed 2D keypoints.
         keypoints_3d (np.array): Array with shape (N,4) containing the transformed 3D keypoints.
-        smpl_params (Dict): Transformed SMPL parameters.
-        has_smpl_params (Dict): Valid flag for transformed SMPL parameters.
+        smpl_params (dict): Transformed SMPL parameters.
+        has_smpl_params (dict): Valid flag for transformed SMPL parameters.
         img_size (np.array): Image size of the original image.
     """
     if isinstance(img_path, str):
@@ -705,7 +751,9 @@ def get_example(
 
     # 2. get augmentation params
     if do_augment:
-        scale, rot, do_flip, do_extreme_crop, extreme_crop_lvl, color_scale, tx, ty = do_augmentation(augm_config)
+        scale, rot, do_flip, do_extreme_crop, extreme_crop_lvl, color_scale, tx, ty = (
+            do_augmentation(augm_config)
+        )
     else:
         scale, rot, do_flip, do_extreme_crop, extreme_crop_lvl, color_scale, tx, ty = (
             1.0,
@@ -723,7 +771,9 @@ def get_example(
 
     if do_extreme_crop:
         if extreme_crop_lvl == 0:
-            center_x1, center_y1, width1, height1 = extreme_cropping(center_x, center_y, width, height, keypoints_2d)
+            center_x1, center_y1, width1, height1 = extreme_cropping(
+                center_x, center_y, width, height, keypoints_2d
+            )
         elif extreme_crop_lvl == 1:
             center_x1, center_y1, width1, height1 = extreme_cropping_aggressive(
                 center_x, center_y, width, height, keypoints_2d
@@ -748,7 +798,9 @@ def get_example(
     center_y += height * ty
 
     # Process 3D keypoints
-    keypoints_3d = keypoint_3d_processing(keypoints_3d, flip_kp_permutation, rot, do_flip)
+    keypoints_3d = keypoint_3d_processing(
+        keypoints_3d, flip_kp_permutation, rot, do_flip
+    )
 
     # 3. generate image patch
     if use_skimage_antialias:
@@ -756,7 +808,11 @@ def get_example(
         downsampling_factor = patch_width / (width * scale)
         if downsampling_factor > 1.1:
             cvimg = gaussian(
-                cvimg, sigma=(downsampling_factor - 1) / 2, channel_axis=2, preserve_range=True, truncate=3.0
+                cvimg,
+                sigma=(downsampling_factor - 1) / 2,
+                channel_axis=2,
+                preserve_range=True,
+                truncate=3.0,
             )
 
     img_patch_cv, trans = generate_image_patch_cv2(
@@ -785,7 +841,9 @@ def get_example(
     img_patch_cv = image.copy()
     img_patch = convert_cvimg_to_tensor(image)
 
-    smpl_params, has_smpl_params = smpl_param_processing(smpl_params, has_smpl_params, rot, do_flip)
+    smpl_params, has_smpl_params = smpl_param_processing(
+        smpl_params, has_smpl_params, rot, do_flip
+    )
 
     # apply normalization
     for n_c in range(min(img_channels, 3)):
@@ -800,12 +858,33 @@ def get_example(
     keypoints_2d[:, :-1] = keypoints_2d[:, :-1] / patch_width - 0.5
 
     if not return_trans:
-        return img_patch, keypoints_2d, keypoints_3d, smpl_params, has_smpl_params, img_size
+        return (
+            img_patch,
+            keypoints_2d,
+            keypoints_3d,
+            smpl_params,
+            has_smpl_params,
+            img_size,
+        )
     else:
-        return img_patch, keypoints_2d, keypoints_3d, smpl_params, has_smpl_params, img_size, trans
+        return (
+            img_patch,
+            keypoints_2d,
+            keypoints_3d,
+            smpl_params,
+            has_smpl_params,
+            img_size,
+            trans,
+        )
 
 
-def crop_to_hips(center_x: float, center_y: float, width: float, height: float, keypoints_2d: np.array) -> Tuple:
+def crop_to_hips(
+    center_x: float,
+    center_y: float,
+    width: float,
+    height: float,
+    keypoints_2d: np.ndarray,
+) -> tuple:
     """
     Extreme cropping: Crop the box up to the hip locations.
     Args:
@@ -821,7 +900,22 @@ def crop_to_hips(center_x: float, center_y: float, width: float, height: float, 
         height (float): New bounding box height.
     """
     keypoints_2d = keypoints_2d.copy()
-    lower_body_keypoints = [10, 11, 13, 14, 19, 20, 21, 22, 23, 24, 25 + 0, 25 + 1, 25 + 4, 25 + 5]
+    lower_body_keypoints = [
+        10,
+        11,
+        13,
+        14,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25 + 0,
+        25 + 1,
+        25 + 4,
+        25 + 5,
+    ]
     keypoints_2d[lower_body_keypoints, :] = 0
     if keypoints_2d[:, -1].sum() > 1:
         center, scale = get_bbox(keypoints_2d)
@@ -832,7 +926,13 @@ def crop_to_hips(center_x: float, center_y: float, width: float, height: float, 
     return center_x, center_y, width, height
 
 
-def crop_to_shoulders(center_x: float, center_y: float, width: float, height: float, keypoints_2d: np.array):
+def crop_to_shoulders(
+    center_x: float,
+    center_y: float,
+    width: float,
+    height: float,
+    keypoints_2d: np.ndarray,
+):
     """
     Extreme cropping: Crop the box up to the shoulder locations.
     Args:
@@ -848,9 +948,25 @@ def crop_to_shoulders(center_x: float, center_y: float, width: float, height: fl
         height (float): New bounding box height.
     """
     keypoints_2d = keypoints_2d.copy()
-    lower_body_keypoints = [3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 19, 20, 21, 22, 23, 24] + [
-        25 + i for i in [0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 14, 15, 16]
-    ]
+    lower_body_keypoints = [
+        3,
+        4,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+    ] + [25 + i for i in [0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 14, 15, 16]]
     keypoints_2d[lower_body_keypoints, :] = 0
     center, scale = get_bbox(keypoints_2d)
     if keypoints_2d[:, -1].sum() > 1:
@@ -862,7 +978,13 @@ def crop_to_shoulders(center_x: float, center_y: float, width: float, height: fl
     return center_x, center_y, width, height
 
 
-def crop_to_head(center_x: float, center_y: float, width: float, height: float, keypoints_2d: np.array):
+def crop_to_head(
+    center_x: float,
+    center_y: float,
+    width: float,
+    height: float,
+    keypoints_2d: np.ndarray,
+):
     """
     Extreme cropping: Crop the box and keep on only the head.
     Args:
@@ -878,9 +1000,25 @@ def crop_to_head(center_x: float, center_y: float, width: float, height: float, 
         height (float): New bounding box height.
     """
     keypoints_2d = keypoints_2d.copy()
-    lower_body_keypoints = [3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 19, 20, 21, 22, 23, 24] + [
-        25 + i for i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 15, 16]
-    ]
+    lower_body_keypoints = [
+        3,
+        4,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+    ] + [25 + i for i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 15, 16]]
     keypoints_2d[lower_body_keypoints, :] = 0
     if keypoints_2d[:, -1].sum() > 1:
         center, scale = get_bbox(keypoints_2d)
@@ -891,7 +1029,13 @@ def crop_to_head(center_x: float, center_y: float, width: float, height: float, 
     return center_x, center_y, width, height
 
 
-def crop_torso_only(center_x: float, center_y: float, width: float, height: float, keypoints_2d: np.array):
+def crop_torso_only(
+    center_x: float,
+    center_y: float,
+    width: float,
+    height: float,
+    keypoints_2d: np.ndarray,
+):
     """
     Extreme cropping: Crop the box and keep on only the torso.
     Args:
@@ -907,9 +1051,27 @@ def crop_torso_only(center_x: float, center_y: float, width: float, height: floa
         height (float): New bounding box height.
     """
     keypoints_2d = keypoints_2d.copy()
-    nontorso_body_keypoints = [0, 3, 4, 6, 7, 10, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24] + [
-        25 + i for i in [0, 1, 4, 5, 6, 7, 10, 11, 13, 17, 18]
-    ]
+    nontorso_body_keypoints = [
+        0,
+        3,
+        4,
+        6,
+        7,
+        10,
+        11,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+    ] + [25 + i for i in [0, 1, 4, 5, 6, 7, 10, 11, 13, 17, 18]]
     keypoints_2d[nontorso_body_keypoints, :] = 0
     if keypoints_2d[:, -1].sum() > 1:
         center, scale = get_bbox(keypoints_2d)
@@ -920,7 +1082,13 @@ def crop_torso_only(center_x: float, center_y: float, width: float, height: floa
     return center_x, center_y, width, height
 
 
-def crop_rightarm_only(center_x: float, center_y: float, width: float, height: float, keypoints_2d: np.array):
+def crop_rightarm_only(
+    center_x: float,
+    center_y: float,
+    width: float,
+    height: float,
+    keypoints_2d: np.ndarray,
+):
     """
     Extreme cropping: Crop the box and keep on only the right arm.
     Args:
@@ -936,9 +1104,30 @@ def crop_rightarm_only(center_x: float, center_y: float, width: float, height: f
         height (float): New bounding box height.
     """
     keypoints_2d = keypoints_2d.copy()
-    nonrightarm_body_keypoints = [0, 1, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24] + [
-        25 + i for i in [0, 1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
-    ]
+    nonrightarm_body_keypoints = [
+        0,
+        1,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+    ] + [25 + i for i in [0, 1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]]
     keypoints_2d[nonrightarm_body_keypoints, :] = 0
     if keypoints_2d[:, -1].sum() > 1:
         center, scale = get_bbox(keypoints_2d)
@@ -949,7 +1138,13 @@ def crop_rightarm_only(center_x: float, center_y: float, width: float, height: f
     return center_x, center_y, width, height
 
 
-def crop_leftarm_only(center_x: float, center_y: float, width: float, height: float, keypoints_2d: np.array):
+def crop_leftarm_only(
+    center_x: float,
+    center_y: float,
+    width: float,
+    height: float,
+    keypoints_2d: np.ndarray,
+):
     """
     Extreme cropping: Crop the box and keep on only the left arm.
     Args:
@@ -965,9 +1160,30 @@ def crop_leftarm_only(center_x: float, center_y: float, width: float, height: fl
         height (float): New bounding box height.
     """
     keypoints_2d = keypoints_2d.copy()
-    nonleftarm_body_keypoints = [0, 1, 2, 3, 4, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24] + [
-        25 + i for i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 14, 15, 16, 17, 18]
-    ]
+    nonleftarm_body_keypoints = [
+        0,
+        1,
+        2,
+        3,
+        4,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+    ] + [25 + i for i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 14, 15, 16, 17, 18]]
     keypoints_2d[nonleftarm_body_keypoints, :] = 0
     if keypoints_2d[:, -1].sum() > 1:
         center, scale = get_bbox(keypoints_2d)
@@ -978,7 +1194,13 @@ def crop_leftarm_only(center_x: float, center_y: float, width: float, height: fl
     return center_x, center_y, width, height
 
 
-def crop_legs_only(center_x: float, center_y: float, width: float, height: float, keypoints_2d: np.array):
+def crop_legs_only(
+    center_x: float,
+    center_y: float,
+    width: float,
+    height: float,
+    keypoints_2d: np.ndarray,
+):
     """
     Extreme cropping: Crop the box and keep on only the legs.
     Args:
@@ -1007,7 +1229,13 @@ def crop_legs_only(center_x: float, center_y: float, width: float, height: float
     return center_x, center_y, width, height
 
 
-def crop_rightleg_only(center_x: float, center_y: float, width: float, height: float, keypoints_2d: np.array):
+def crop_rightleg_only(
+    center_x: float,
+    center_y: float,
+    width: float,
+    height: float,
+    keypoints_2d: np.ndarray,
+):
     """
     Extreme cropping: Crop the box and keep on only the right leg.
     Args:
@@ -1023,9 +1251,27 @@ def crop_rightleg_only(center_x: float, center_y: float, width: float, height: f
         height (float): New bounding box height.
     """
     keypoints_2d = keypoints_2d.copy()
-    nonrightleg_body_keypoints = [0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21] + [
-        25 + i for i in [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
-    ]
+    nonrightleg_body_keypoints = [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+    ] + [25 + i for i in [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]]
     keypoints_2d[nonrightleg_body_keypoints, :] = 0
     if keypoints_2d[:, -1].sum() > 1:
         center, scale = get_bbox(keypoints_2d)
@@ -1036,7 +1282,13 @@ def crop_rightleg_only(center_x: float, center_y: float, width: float, height: f
     return center_x, center_y, width, height
 
 
-def crop_leftleg_only(center_x: float, center_y: float, width: float, height: float, keypoints_2d: np.array):
+def crop_leftleg_only(
+    center_x: float,
+    center_y: float,
+    width: float,
+    height: float,
+    keypoints_2d: np.ndarray,
+):
     """
     Extreme cropping: Crop the box and keep on only the left leg.
     Args:
@@ -1052,9 +1304,27 @@ def crop_leftleg_only(center_x: float, center_y: float, width: float, height: fl
         height (float): New bounding box height.
     """
     keypoints_2d = keypoints_2d.copy()
-    nonleftleg_body_keypoints = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15, 16, 17, 18, 22, 23, 24] + [
-        25 + i for i in [0, 1, 2, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
-    ]
+    nonleftleg_body_keypoints = [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        15,
+        16,
+        17,
+        18,
+        22,
+        23,
+        24,
+    ] + [25 + i for i in [0, 1, 2, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]]
     keypoints_2d[nonleftleg_body_keypoints, :] = 0
     if keypoints_2d[:, -1].sum() > 1:
         center, scale = get_bbox(keypoints_2d)
@@ -1065,7 +1335,7 @@ def crop_leftleg_only(center_x: float, center_y: float, width: float, height: fl
     return center_x, center_y, width, height
 
 
-def full_body(keypoints_2d: np.array) -> bool:
+def full_body(keypoints_2d: np.ndarray) -> bool:
     """
     Check if all main body joints are visible.
     Args:
@@ -1076,12 +1346,15 @@ def full_body(keypoints_2d: np.array) -> bool:
 
     body_keypoints_openpose = [2, 3, 4, 5, 6, 7, 10, 11, 13, 14]
     body_keypoints = [25 + i for i in [8, 7, 6, 9, 10, 11, 1, 0, 4, 5]]
-    return (np.maximum(keypoints_2d[body_keypoints, -1], keypoints_2d[body_keypoints_openpose, -1]) > 0).sum() == len(
-        body_keypoints
-    )
+    return (
+        np.maximum(
+            keypoints_2d[body_keypoints, -1], keypoints_2d[body_keypoints_openpose, -1]
+        )
+        > 0
+    ).sum() == len(body_keypoints)
 
 
-def upper_body(keypoints_2d: np.array):
+def upper_body(keypoints_2d: np.ndarray):
     """
     Check if all upper body joints are visible.
     Args:
@@ -1093,12 +1366,20 @@ def upper_body(keypoints_2d: np.array):
     lower_body_keypoints = [25 + i for i in [1, 0, 4, 5]]
     upper_body_keypoints_openpose = [0, 1, 15, 16, 17, 18]
     upper_body_keypoints = [25 + 8, 25 + 9, 25 + 12, 25 + 13, 25 + 17, 25 + 18]
-    return ((keypoints_2d[lower_body_keypoints + lower_body_keypoints_openpose, -1] > 0).sum() == 0) and (
-        (keypoints_2d[upper_body_keypoints + upper_body_keypoints_openpose, -1] > 0).sum() >= 2
+    return (
+        (
+            keypoints_2d[lower_body_keypoints + lower_body_keypoints_openpose, -1] > 0
+        ).sum()
+        == 0
+    ) and (
+        (
+            keypoints_2d[upper_body_keypoints + upper_body_keypoints_openpose, -1] > 0
+        ).sum()
+        >= 2
     )
 
 
-def get_bbox(keypoints_2d: np.array, rescale: float = 1.2) -> Tuple:
+def get_bbox(keypoints_2d: np.ndarray, rescale: float = 1.2) -> tuple:
     """
     Get center and scale for bounding box from openpose detections.
     Args:
@@ -1118,7 +1399,13 @@ def get_bbox(keypoints_2d: np.array, rescale: float = 1.2) -> Tuple:
     return center, scale
 
 
-def extreme_cropping(center_x: float, center_y: float, width: float, height: float, keypoints_2d: np.array) -> Tuple:
+def extreme_cropping(
+    center_x: float,
+    center_y: float,
+    width: float,
+    height: float,
+    keypoints_2d: np.ndarray,
+) -> tuple:
     """
     Perform extreme cropping
     Args:
@@ -1137,23 +1424,37 @@ def extreme_cropping(center_x: float, center_y: float, width: float, height: flo
     p = torch.rand(1).item()
     if full_body(keypoints_2d):
         if p < 0.7:
-            center_x, center_y, width, height = crop_to_hips(center_x, center_y, width, height, keypoints_2d)
+            center_x, center_y, width, height = crop_to_hips(
+                center_x, center_y, width, height, keypoints_2d
+            )
         elif p < 0.9:
-            center_x, center_y, width, height = crop_to_shoulders(center_x, center_y, width, height, keypoints_2d)
+            center_x, center_y, width, height = crop_to_shoulders(
+                center_x, center_y, width, height, keypoints_2d
+            )
         else:
-            center_x, center_y, width, height = crop_to_head(center_x, center_y, width, height, keypoints_2d)
+            center_x, center_y, width, height = crop_to_head(
+                center_x, center_y, width, height, keypoints_2d
+            )
     elif upper_body(keypoints_2d):
         if p < 0.9:
-            center_x, center_y, width, height = crop_to_shoulders(center_x, center_y, width, height, keypoints_2d)
+            center_x, center_y, width, height = crop_to_shoulders(
+                center_x, center_y, width, height, keypoints_2d
+            )
         else:
-            center_x, center_y, width, height = crop_to_head(center_x, center_y, width, height, keypoints_2d)
+            center_x, center_y, width, height = crop_to_head(
+                center_x, center_y, width, height, keypoints_2d
+            )
 
     return center_x, center_y, max(width, height), max(width, height)
 
 
 def extreme_cropping_aggressive(
-    center_x: float, center_y: float, width: float, height: float, keypoints_2d: np.array
-) -> Tuple:
+    center_x: float,
+    center_y: float,
+    width: float,
+    height: float,
+    keypoints_2d: np.ndarray,
+) -> tuple:
     """
     Perform aggressive extreme cropping
     Args:
@@ -1172,32 +1473,60 @@ def extreme_cropping_aggressive(
     p = torch.rand(1).item()
     if full_body(keypoints_2d):
         if p < 0.2:
-            center_x, center_y, width, height = crop_to_hips(center_x, center_y, width, height, keypoints_2d)
+            center_x, center_y, width, height = crop_to_hips(
+                center_x, center_y, width, height, keypoints_2d
+            )
         elif p < 0.3:
-            center_x, center_y, width, height = crop_to_shoulders(center_x, center_y, width, height, keypoints_2d)
+            center_x, center_y, width, height = crop_to_shoulders(
+                center_x, center_y, width, height, keypoints_2d
+            )
         elif p < 0.4:
-            center_x, center_y, width, height = crop_to_head(center_x, center_y, width, height, keypoints_2d)
+            center_x, center_y, width, height = crop_to_head(
+                center_x, center_y, width, height, keypoints_2d
+            )
         elif p < 0.5:
-            center_x, center_y, width, height = crop_torso_only(center_x, center_y, width, height, keypoints_2d)
+            center_x, center_y, width, height = crop_torso_only(
+                center_x, center_y, width, height, keypoints_2d
+            )
         elif p < 0.6:
-            center_x, center_y, width, height = crop_rightarm_only(center_x, center_y, width, height, keypoints_2d)
+            center_x, center_y, width, height = crop_rightarm_only(
+                center_x, center_y, width, height, keypoints_2d
+            )
         elif p < 0.7:
-            center_x, center_y, width, height = crop_leftarm_only(center_x, center_y, width, height, keypoints_2d)
+            center_x, center_y, width, height = crop_leftarm_only(
+                center_x, center_y, width, height, keypoints_2d
+            )
         elif p < 0.8:
-            center_x, center_y, width, height = crop_legs_only(center_x, center_y, width, height, keypoints_2d)
+            center_x, center_y, width, height = crop_legs_only(
+                center_x, center_y, width, height, keypoints_2d
+            )
         elif p < 0.9:
-            center_x, center_y, width, height = crop_rightleg_only(center_x, center_y, width, height, keypoints_2d)
+            center_x, center_y, width, height = crop_rightleg_only(
+                center_x, center_y, width, height, keypoints_2d
+            )
         else:
-            center_x, center_y, width, height = crop_leftleg_only(center_x, center_y, width, height, keypoints_2d)
+            center_x, center_y, width, height = crop_leftleg_only(
+                center_x, center_y, width, height, keypoints_2d
+            )
     elif upper_body(keypoints_2d):
         if p < 0.2:
-            center_x, center_y, width, height = crop_to_shoulders(center_x, center_y, width, height, keypoints_2d)
+            center_x, center_y, width, height = crop_to_shoulders(
+                center_x, center_y, width, height, keypoints_2d
+            )
         elif p < 0.4:
-            center_x, center_y, width, height = crop_to_head(center_x, center_y, width, height, keypoints_2d)
+            center_x, center_y, width, height = crop_to_head(
+                center_x, center_y, width, height, keypoints_2d
+            )
         elif p < 0.6:
-            center_x, center_y, width, height = crop_torso_only(center_x, center_y, width, height, keypoints_2d)
+            center_x, center_y, width, height = crop_torso_only(
+                center_x, center_y, width, height, keypoints_2d
+            )
         elif p < 0.8:
-            center_x, center_y, width, height = crop_rightarm_only(center_x, center_y, width, height, keypoints_2d)
+            center_x, center_y, width, height = crop_rightarm_only(
+                center_x, center_y, width, height, keypoints_2d
+            )
         else:
-            center_x, center_y, width, height = crop_leftarm_only(center_x, center_y, width, height, keypoints_2d)
+            center_x, center_y, width, height = crop_leftarm_only(
+                center_x, center_y, width, height, keypoints_2d
+            )
     return center_x, center_y, max(width, height), max(width, height)

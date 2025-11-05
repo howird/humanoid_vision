@@ -6,7 +6,6 @@ import torch.nn as nn
 from einops import rearrange
 from humanoid_vision.models.heads.smpl_mlp_head import SMPLHead
 from omegaconf import OmegaConf
-from torch import nn
 
 
 def positionalencoding1d(d_model, length):
@@ -16,10 +15,19 @@ def positionalencoding1d(d_model, length):
     :return: length*d_model position matrix
     """
     if d_model % 2 != 0:
-        raise ValueError("Cannot use sin/cos positional encoding with odd dim (got dim={:d})".format(d_model))
+        raise ValueError(
+            "Cannot use sin/cos positional encoding with odd dim (got dim={:d})".format(
+                d_model
+            )
+        )
     pe = torch.zeros(length, d_model)
     position = torch.arange(0, length).unsqueeze(1)
-    div_term = torch.exp((torch.arange(0, d_model, 2, dtype=torch.float) * -(math.log(10000.0) / d_model)))
+    div_term = torch.exp(
+        (
+            torch.arange(0, d_model, 2, dtype=torch.float)
+            * -(math.log(10000.0) / d_model)
+        )
+    )
     pe[:, 0::2] = torch.sin(position.float() * div_term)
     pe[:, 1::2] = torch.cos(position.float() * div_term)
 
@@ -34,17 +42,29 @@ def positionalencoding2d(d_model, height, width):
     :return: d_model*height*width position matrix
     """
     if d_model % 4 != 0:
-        raise ValueError("Cannot use sin/cos positional encoding with odd dimension (got dim={:d})".format(d_model))
+        raise ValueError(
+            "Cannot use sin/cos positional encoding with odd dimension (got dim={:d})".format(
+                d_model
+            )
+        )
     pe = torch.zeros(d_model, height, width)
     # Each dimension use half of d_model
     d_model = int(d_model / 2)
     div_term = torch.exp(torch.arange(0.0, d_model, 2) * -(math.log(10000.0) / d_model))
     pos_w = torch.arange(0.0, width).unsqueeze(1)
     pos_h = torch.arange(0.0, height).unsqueeze(1)
-    pe[0:d_model:2, :, :] = torch.sin(pos_w * div_term).transpose(0, 1).unsqueeze(1).repeat(1, height, 1)
-    pe[1:d_model:2, :, :] = torch.cos(pos_w * div_term).transpose(0, 1).unsqueeze(1).repeat(1, height, 1)
-    pe[d_model::2, :, :] = torch.sin(pos_h * div_term).transpose(0, 1).unsqueeze(2).repeat(1, 1, width)
-    pe[d_model + 1 :: 2, :, :] = torch.cos(pos_h * div_term).transpose(0, 1).unsqueeze(2).repeat(1, 1, width)
+    pe[0:d_model:2, :, :] = (
+        torch.sin(pos_w * div_term).transpose(0, 1).unsqueeze(1).repeat(1, height, 1)
+    )
+    pe[1:d_model:2, :, :] = (
+        torch.cos(pos_w * div_term).transpose(0, 1).unsqueeze(1).repeat(1, height, 1)
+    )
+    pe[d_model::2, :, :] = (
+        torch.sin(pos_h * div_term).transpose(0, 1).unsqueeze(2).repeat(1, 1, width)
+    )
+    pe[d_model + 1 :: 2, :, :] = (
+        torch.cos(pos_h * div_term).transpose(0, 1).unsqueeze(2).repeat(1, 1, width)
+    )
 
     return pe
 
@@ -63,7 +83,11 @@ class FeedForward(nn.Module):
     def __init__(self, dim, hidden_dim, dropout=0.0):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(dim, hidden_dim), nn.GELU(), nn.Dropout(dropout), nn.Linear(hidden_dim, dim), nn.Dropout(dropout)
+            nn.Linear(dim, hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, dim),
+            nn.Dropout(dropout),
         )
 
     def forward(self, x):
@@ -76,8 +100,12 @@ class ProjectInOut(nn.Module):
         self.fn = fn
 
         need_projection = dim_in != dim_out
-        self.project_in = nn.Linear(dim_in, dim_out) if need_projection else nn.Identity()
-        self.project_out = nn.Linear(dim_out, dim_in) if need_projection else nn.Identity()
+        self.project_in = (
+            nn.Linear(dim_in, dim_out) if need_projection else nn.Identity()
+        )
+        self.project_out = (
+            nn.Linear(dim_out, dim_in) if need_projection else nn.Identity()
+        )
 
     def forward(self, x, *args, **kwargs):
         x = self.project_in(x)
@@ -98,7 +126,11 @@ class Attention(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.to_qkv = nn.Linear(dim, inner_dim * 3, bias=False)
 
-        self.to_out = nn.Sequential(nn.Linear(inner_dim, dim), nn.Dropout(dropout)) if project_out else nn.Identity()
+        self.to_out = (
+            nn.Sequential(nn.Linear(inner_dim, dim), nn.Dropout(dropout))
+            if project_out
+            else nn.Identity()
+        )
 
     def forward(self, x, mask_all):
         qkv = self.to_qkv(x).chunk(3, dim=-1)
@@ -111,7 +143,9 @@ class Attention(nn.Module):
         masks_np = masks_np.view(BS, -1)
         masks_bert = masks_bert.view(BS, -1)
 
-        masks_np_ = rearrange(masks_np, "b i -> b () i ()") * rearrange(masks_np, "b j -> b () () j")
+        masks_np_ = rearrange(masks_np, "b i -> b () i ()") * rearrange(
+            masks_np, "b j -> b () () j"
+        )
         masks_np_ = masks_np_.repeat(1, self.heads, 1, 1)
 
         masks_bert_ = rearrange(masks_bert, "b i -> b () () i")
@@ -131,7 +165,9 @@ class Attention(nn.Module):
         return self.to_out(out)
 
 
-def drop_path(x, drop_prob: float = 0.0, training: bool = False, scale_by_keep: bool = True):
+def drop_path(
+    x, drop_prob: float = 0.0, training: bool = False, scale_by_keep: bool = True
+):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
     This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
     the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
@@ -142,7 +178,9 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False, scale_by_keep: 
     if drop_prob == 0.0 or not training:
         return x
     keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    shape = (x.shape[0],) + (1,) * (
+        x.ndim - 1
+    )  # work with diff dim tensors, not just 2D ConvNets
     random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
     if keep_prob > 0.0 and scale_by_keep:
         random_tensor.div_(keep_prob)
@@ -165,7 +203,9 @@ class DropPath(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, dim, depth, heads, dim_head, mlp_dim, dropout=0.0, drop_path=0.0):
+    def __init__(
+        self, dim, depth, heads, dim_head, mlp_dim, dropout=0.0, drop_path=0.0
+    ):
         super().__init__()
         self.layers = nn.ModuleList([])
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
@@ -174,7 +214,12 @@ class Transformer(nn.Module):
             self.layers.append(
                 nn.ModuleList(
                     [
-                        PreNorm(dim, Attention(dim, heads=heads, dim_head=dim_head, dropout=dropout)),
+                        PreNorm(
+                            dim,
+                            Attention(
+                                dim, heads=heads, dim_head=dim_head, dropout=dropout
+                            ),
+                        ),
                         PreNorm(dim, FeedForward(dim, mlp_dim, dropout=dropout)),
                     ]
                 )
@@ -216,25 +261,45 @@ class lart_transformer(nn.Module):
         self.class_token = nn.Parameter(torch.randn(1, 1, self.dim))
 
         self.pos_embedding = nn.Parameter(positionalencoding1d(self.dim, 10000))
-        self.pos_embedding_learned1 = nn.Parameter(torch.randn(1, self.cfg.frame_length, self.dim))
-        self.pos_embedding_learned2 = nn.Parameter(torch.randn(1, self.cfg.frame_length, self.dim))
+        self.pos_embedding_learned1 = nn.Parameter(
+            torch.randn(1, self.cfg.frame_length, self.dim)
+        )
+        self.pos_embedding_learned2 = nn.Parameter(
+            torch.randn(1, self.cfg.frame_length, self.dim)
+        )
         self.register_buffer("pe", self.pos_embedding)
 
-        self.transformer = Transformer(self.dim, depth, heads, dim_head, mlp_dim, dropout, drop_path=droppath)
-        self.transformer1 = Transformer(self.dim, depth, heads, dim_head, mlp_dim, dropout, drop_path=droppath)
-        self.transformer2 = Transformer(self.dim, 1, heads, dim_head, mlp_dim, dropout, drop_path=droppath)
+        self.transformer = Transformer(
+            self.dim, depth, heads, dim_head, mlp_dim, dropout, drop_path=droppath
+        )
+        self.transformer1 = Transformer(
+            self.dim, depth, heads, dim_head, mlp_dim, dropout, drop_path=droppath
+        )
+        self.transformer2 = Transformer(
+            self.dim, 1, heads, dim_head, mlp_dim, dropout, drop_path=droppath
+        )
 
         pad = self.cfg.transformer.conv.pad
         stride = self.cfg.transformer.conv.stride
         kernel = stride + 2 * pad
-        self.conv_en = nn.Conv1d(self.dim, self.dim, kernel_size=kernel, stride=stride, padding=pad)
-        self.conv_de = nn.ConvTranspose1d(self.dim, self.dim, kernel_size=kernel, stride=stride, padding=pad)
+        self.conv_en = nn.Conv1d(
+            self.dim, self.dim, kernel_size=kernel, stride=stride, padding=pad
+        )
+        self.conv_de = nn.ConvTranspose1d(
+            self.dim, self.dim, kernel_size=kernel, stride=stride, padding=pad
+        )
 
         # Pose shape encoder for encoding pose shape features, used by default
         self.pose_shape_encoder = nn.Sequential(
-            nn.Linear(self.cfg.extra_feat.pose_shape.dim, self.cfg.extra_feat.pose_shape.mid_dim),
+            nn.Linear(
+                self.cfg.extra_feat.pose_shape.dim,
+                self.cfg.extra_feat.pose_shape.mid_dim,
+            ),
             nn.ReLU(),
-            nn.Linear(self.cfg.extra_feat.pose_shape.mid_dim, self.cfg.extra_feat.pose_shape.en_dim),
+            nn.Linear(
+                self.cfg.extra_feat.pose_shape.mid_dim,
+                self.cfg.extra_feat.pose_shape.en_dim,
+            ),
         )
 
         # SMPL head for predicting SMPL parameters
@@ -280,14 +345,22 @@ class lart_transformer(nn.Module):
             mask_detection = data["mask_detection"]
             for i in range(data["has_detection"].shape[0]):
                 indexes = has_detection[i].nonzero()
-                indexes_mask = indexes[torch.randperm(indexes.shape[0])[: int(indexes.shape[0] * self.cfg.mask_ratio)]]
-                mask_detection[i, indexes_mask[:, 0], indexes_mask[:, 1], indexes_mask[:, 2]] = 1.0
+                indexes_mask = indexes[
+                    torch.randperm(indexes.shape[0])[
+                        : int(indexes.shape[0] * self.cfg.mask_ratio)
+                    ]
+                ]
+                mask_detection[
+                    i, indexes_mask[:, 0], indexes_mask[:, 1], indexes_mask[:, 2]
+                ] = 1.0
 
         elif mask_type == "zero":
             has_detection = data["has_detection"] == 0
             mask_detection = data["mask_detection"]
             indexes_mask = has_detection.nonzero()
-            mask_detection[indexes_mask[:, 0], indexes_mask[:, 1], indexes_mask[:, 2], :] = 1.0
+            mask_detection[
+                indexes_mask[:, 0], indexes_mask[:, 1], indexes_mask[:, 2], :
+            ] = 1.0
             has_detection = has_detection * 0 + 1.0
 
         else:
@@ -326,7 +399,9 @@ class lart_transformer(nn.Module):
         has_detection = has_detection * 0 + 1
         mask_detection = mask_detection * 0
         x = self.transformer2(x, [has_detection, mask_detection])
-        x = torch.concat([self.class_token.repeat(BS, self.cfg.max_people, 1), x], dim=1)
+        x = torch.concat(
+            [self.class_token.repeat(BS, self.cfg.max_people, 1), x], dim=1
+        )
 
         return x, 0
 
@@ -353,9 +428,15 @@ class PoseTransformerV2(nn.Module):
             droppath=self.cfg.transformer.droppath,
         )
 
-        self.mean_, self.std_ = np.load(self.phalp_cfg.pose_predictor.mean_std, allow_pickle=True)
-        self.mean_ = np.concatenate((self.mean_, np.zeros((1, 229 - self.mean_.shape[1]))), axis=1)
-        self.std_ = np.concatenate((self.std_, np.ones((1, 229 - self.std_.shape[1]))), axis=1)
+        self.mean_, self.std_ = np.load(
+            self.phalp_cfg.pose_predictor.mean_std, allow_pickle=True
+        )
+        self.mean_ = np.concatenate(
+            (self.mean_, np.zeros((1, 229 - self.mean_.shape[1]))), axis=1
+        )
+        self.std_ = np.concatenate(
+            (self.std_, np.ones((1, 229 - self.std_.shape[1]))), axis=1
+        )
         self.mean_, self.std_ = torch.tensor(self.mean_), torch.tensor(self.std_)
         self.mean_, self.std_ = self.mean_.float(), self.std_.float()
         self.mean_, self.std_ = self.mean_.unsqueeze(0), self.std_.unsqueeze(0)
@@ -369,7 +450,8 @@ class PoseTransformerV2(nn.Module):
         checkpoint_file = torch.load(path)
         # checkpoint_file_filtered = {k[8:]: v for k, v in checkpoint_file['state_dict'].items()} # remove "encoder." from keys
         checkpoint_file_filtered = {
-            k.replace("encoder.", ""): v for k, v in checkpoint_file["state_dict"].items()
+            k.replace("encoder.", ""): v
+            for k, v in checkpoint_file["state_dict"].items()
         }  # remove "encoder." from keys
         out = self.encoder.load_state_dict(checkpoint_file_filtered, strict=False)
 
@@ -380,12 +462,23 @@ class PoseTransformerV2(nn.Module):
         pose_tokens = output.contiguous()
         pose_tokens_ = rearrange(pose_tokens, "b tp dim -> (b tp) dim")
 
-        pred_smpl_params = [self.encoder.smpl_head[i](pose_tokens_)[0] for i in range(self.cfg.num_smpl_heads)]
-        pred_cam = [self.encoder.loca_head[i](pose_tokens) for i in range(self.cfg.num_smpl_heads)]
-        pred_ava = [self.encoder.action_head_ava[i](pose_tokens) for i in range(self.cfg.num_smpl_heads)]
+        pred_smpl_params = [
+            self.encoder.smpl_head[i](pose_tokens_)[0]
+            for i in range(self.cfg.num_smpl_heads)
+        ]
+        pred_cam = [
+            self.encoder.loca_head[i](pose_tokens)
+            for i in range(self.cfg.num_smpl_heads)
+        ]
+        pred_ava = [
+            self.encoder.action_head_ava[i](pose_tokens)
+            for i in range(self.cfg.num_smpl_heads)
+        ]
 
         pred_cam = torch.stack(pred_cam, dim=0)[0]
-        pred_cam = rearrange(pred_cam, "b (t p) dim -> b t p dim", b=BS, t=FL, p=self.cfg.max_people)  # (BS, T, P, 3)
+        pred_cam = rearrange(
+            pred_cam, "b (t p) dim -> b t p dim", b=BS, t=FL, p=self.cfg.max_people
+        )  # (BS, T, P, 3)
 
         global_orient = rearrange(
             pred_smpl_params[0]["global_orient"],
@@ -408,12 +501,21 @@ class PoseTransformerV2(nn.Module):
             z=3,
         )  # (BS, T, P, 207)
         betas = rearrange(
-            pred_smpl_params[0]["betas"], "(b t p) z -> b t p z", b=BS, t=FL, p=self.cfg.max_people, z=10
+            pred_smpl_params[0]["betas"],
+            "(b t p) z -> b t p z",
+            b=BS,
+            t=FL,
+            p=self.cfg.max_people,
+            z=10,
         )  # (BS, T, P, 10)
-        pose_vector = torch.cat((global_orient, body_pose, betas, pred_cam), dim=-1)  # (BS, T, P, 229)
+        pose_vector = torch.cat(
+            (global_orient, body_pose, betas, pred_cam), dim=-1
+        )  # (BS, T, P, 229)
 
         pred_ava = torch.stack(pred_ava, dim=0)[0]
-        pred_ava = rearrange(pred_ava, "b (t p) dim -> b t p dim", b=BS, t=FL, p=self.cfg.max_people)  # (BS, T, P, 60)
+        pred_ava = rearrange(
+            pred_ava, "b (t p) dim -> b t p dim", b=BS, t=FL, p=self.cfg.max_people
+        )  # (BS, T, P, 60)
 
         # TODO: apply moving average for pridictions
 
@@ -455,7 +557,8 @@ class PoseTransformerV2(nn.Module):
             t_end.append(t.item())
 
         input_data = {
-            "pose_shape": (pose_shape_ - self.mean_[:, :, None, :]) / (self.std_[:, :, None, :] + 1e-10),
+            "pose_shape": (pose_shape_ - self.mean_[:, :, None, :])
+            / (self.std_[:, :, None, :] + 1e-10),
             "has_detection": has_detection_,
             "mask_detection": mask_detection_,
         }
@@ -473,20 +576,24 @@ class PoseTransformerV2(nn.Module):
         predicted_pose_camera_at_t = []
         for i in range(en_time.shape[0]):
             t_x = min(t_end[i], self.cfg.frame_length - 1)
-            predicted_pose_camera_at_t.append(decoded_output["pose_camera"][:, t_x, 0, :])
+            predicted_pose_camera_at_t.append(
+                decoded_output["pose_camera"][:, t_x, 0, :]
+            )
         predicted_pose_camera_at_t = torch.stack(predicted_pose_camera_at_t, dim=0)[0]
 
         return predicted_pose_camera_at_t
 
     def add_slowfast_features(self, fast_track):
         # add slowfast features to the fast track
-        from slowfast.utils.parser import load_config, parse_args
+        from slowfast.utils.parser import load_config
         from slowfast.config.defaults import assert_and_infer_cfg
-        from slowfast.visualization.predictor import ActionPredictor, Predictor
+        from slowfast.visualization.predictor import Predictor
         from humanoid_vision.models.predictor.wrapper_pyslowfast import SlowFastWrapper
 
         device = "cuda"
-        path_to_config = "/private/home/jathushan/3D/slowfast/configs/AVA/MViT-L-312_masked.yaml"
+        path_to_config = (
+            "/private/home/jathushan/3D/slowfast/configs/AVA/MViT-L-312_masked.yaml"
+        )
         center_crop = False
         if "MViT" in path_to_config:
             center_crop = True
@@ -535,12 +642,21 @@ class PoseTransformerV2(nn.Module):
                 list_of_all_frames.append(list_of_frames[frame_id])
 
             mid_bbox_ = mid_bbox.reshape(1, 4).astype(np.int32)
-            mid_bbox_ = np.concatenate([mid_bbox_[:, :2], mid_bbox_[:, :2] + mid_bbox_[:, 2:4]], 1)
+            mid_bbox_ = np.concatenate(
+                [mid_bbox_[:, :2], mid_bbox_[:, :2] + mid_bbox_[:, 2:4]], 1
+            )
             # img1 = cv2.imread(mid_frame)
             # img1 = cv2.rectangle(img1, (mid_bbox_[0, 0], mid_bbox_[0, 1]), (mid_bbox_[0, 2], mid_bbox_[0, 3]), (0, 255, 0), 2)
             # cv2.imwrite("test.png", img1)
             with torch.no_grad():
-                task_ = SlowFastWrapper(t_, cfg, list_of_all_frames, mid_bbox_, video_model, center_crop=center_crop)
+                task_ = SlowFastWrapper(
+                    t_,
+                    cfg,
+                    list_of_all_frames,
+                    mid_bbox_,
+                    video_model,
+                    center_crop=center_crop,
+                )
                 preds = task_.action_preds[0]
                 feats = task_.action_preds[1]
                 preds = preds.cpu().numpy()
@@ -585,7 +701,9 @@ class PoseTransformerV2(nn.Module):
         for t_ in range(fast_track["pose_shape"].shape[0]):
             pose_shape_all[0, t_, 0, :] = torch.tensor(fast_track["pose_shape"][t_])
             has_detection_all[0, t_, 0, :] = 1
-            mask_detection_all[0, t_, 0, :] = 1.0 - torch.tensor(fast_track["has_detection"][t_, 0])
+            mask_detection_all[0, t_, 0, :] = 1.0 - torch.tensor(
+                fast_track["has_detection"][t_, 0]
+            )
 
         S_ = 0
         STEP_ = step
@@ -603,11 +721,16 @@ class PoseTransformerV2(nn.Module):
             end_ = w_ + STEP_ + WINDOW_ if (w_ + STEP_ + WINDOW_ <= fl) else fl
 
             pose_shape_[:, : end_ - start_, :, :] = pose_shape_all[:, start_:end_, :, :]
-            has_detection_[:, : end_ - start_, :, :] = has_detection_all[:, start_:end_, :, :]
-            mask_detection_[:, : end_ - start_, :, :] = mask_detection_all[:, start_:end_, :, :]
+            has_detection_[:, : end_ - start_, :, :] = has_detection_all[
+                :, start_:end_, :, :
+            ]
+            mask_detection_[:, : end_ - start_, :, :] = mask_detection_all[
+                :, start_:end_, :, :
+            ]
 
             input_data = {
-                "pose_shape": (pose_shape_ - self.mean_[0, :, None, :]) / (self.std_[0, :, None, :] + 1e-10),
+                "pose_shape": (pose_shape_ - self.mean_[0, :, None, :])
+                / (self.std_[0, :, None, :] + 1e-10),
                 "has_detection": has_detection_,
                 "mask_detection": mask_detection_,
             }
@@ -615,12 +738,16 @@ class PoseTransformerV2(nn.Module):
             # add other features if enables:
             if "joints_3D" in self.cfg.extra_feat.enable:
                 joints_ = torch.zeros(1, self.cfg.frame_length, n_p, 135)
-                joints_[:, : end_ - start_, :, :] = torch.tensor(joints_3d_all[:, start_:end_, :, :])
+                joints_[:, : end_ - start_, :, :] = torch.tensor(
+                    joints_3d_all[:, start_:end_, :, :]
+                )
                 input_data["joints_3D"] = joints_
 
             if "mvit" in self.cfg.extra_feat.enable:
                 mvit_ = torch.zeros(1, self.cfg.frame_length, n_p, 1152)
-                mvit_[:, : end_ - start_, :, :] = torch.tensor(mvit_feat_all[:, start_:end_, :, :])
+                mvit_[:, : end_ - start_, :, :] = torch.tensor(
+                    mvit_feat_all[:, start_:end_, :, :]
+                )
                 input_data["mvit_emb"] = mvit_
 
             input_data = {k: v.cuda() for k, v in input_data.items()}
@@ -632,17 +759,27 @@ class PoseTransformerV2(nn.Module):
                 if w_ <= WINDOW_:
                     STORE_OUTPUT_[:, w_ : w_ + STEP_, :] = output[:, w_ : w_ + STEP_, :]
                 else:
-                    STORE_OUTPUT_[:, w_ : w_ + STEP_, :] = output[:, WINDOW_ : WINDOW_ + STEP_, :]
+                    STORE_OUTPUT_[:, w_ : w_ + STEP_, :] = output[
+                        :, WINDOW_ : WINDOW_ + STEP_, :
+                    ]
             else:
                 if w_ <= WINDOW_:
                     STORE_OUTPUT_[:, w_:fl, :] = output[:, w_:fl, :]
                 else:
-                    STORE_OUTPUT_[:, w_:fl, :] = output[:, WINDOW_ : WINDOW_ + (fl - w_), :]
+                    STORE_OUTPUT_[:, w_:fl, :] = output[
+                        :, WINDOW_ : WINDOW_ + (fl - w_), :
+                    ]
 
         decoded_output = self.readout_pose(STORE_OUTPUT_.cuda())
 
-        fast_track["pose_shape"] = decoded_output["pose_camera"][0, : fast_track["pose_shape"].shape[0], :, :]
-        fast_track["cam_smoothed"] = decoded_output["camera"][0, : fast_track["pose_shape"].shape[0], :, :]
-        fast_track["ava_action"] = decoded_output["ava_action"][0, : fast_track["pose_shape"].shape[0], :, :]
+        fast_track["pose_shape"] = decoded_output["pose_camera"][
+            0, : fast_track["pose_shape"].shape[0], :, :
+        ]
+        fast_track["cam_smoothed"] = decoded_output["camera"][
+            0, : fast_track["pose_shape"].shape[0], :, :
+        ]
+        fast_track["ava_action"] = decoded_output["ava_action"][
+            0, : fast_track["pose_shape"].shape[0], :, :
+        ]
 
         return fast_track

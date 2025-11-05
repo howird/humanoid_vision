@@ -7,7 +7,18 @@ def process_image(img, center, scale, output_size=256):
     mean = np.array([123.675, 116.280, 103.530])
     std = np.array([58.395, 57.120, 57.375])
 
-    img, _, _ = generate_image_patch(img, center[0], center[1], scale, scale, output_size, output_size, False, 1.0, 0.0)
+    img, _, _ = generate_image_patch(
+        img,
+        center[0],
+        center[1],
+        scale,
+        scale,
+        output_size,
+        output_size,
+        False,
+        1.0,
+        0.0,
+    )
     img_n = img[:, :, ::-1].copy().astype(np.float32)
     for n_c in range(3):
         img_n[:, :, n_c] = (img_n[:, :, n_c] - mean[n_c]) / std[n_c]
@@ -15,20 +26,39 @@ def process_image(img, center, scale, output_size=256):
 
 
 def process_mask(img, center, scale, output_size=256):
-    img, _, _ = generate_image_patch(img, center[0], center[1], scale, scale, output_size, output_size, False, 1.0, 0.0)
+    img, _, _ = generate_image_patch(
+        img,
+        center[0],
+        center[1],
+        scale,
+        scale,
+        output_size,
+        output_size,
+        False,
+        1.0,
+        0.0,
+    )
     img_n = img[:, :, ::-1].copy().astype(np.float32)
     return torch.from_numpy(np.transpose(img_n, (2, 0, 1)))
 
 
 def unnormalize(img):
-    img = img * torch.tensor([0.229, 0.224, 0.225], device=img.device).reshape(1, 3, 1, 1)
-    img = img + torch.tensor([0.485, 0.456, 0.406], device=img.device).reshape(1, 3, 1, 1)
+    img = img * torch.tensor([0.229, 0.224, 0.225], device=img.device).reshape(
+        1, 3, 1, 1
+    )
+    img = img + torch.tensor([0.485, 0.456, 0.406], device=img.device).reshape(
+        1, 3, 1, 1
+    )
     return img
 
 
 def normalize(img):
-    img = img - torch.tensor([0.485, 0.456, 0.406], device=img.device).reshape(1, 3, 1, 1)
-    img = img / torch.tensor([0.229, 0.224, 0.225], device=img.device).reshape(1, 3, 1, 1)
+    img = img - torch.tensor([0.485, 0.456, 0.406], device=img.device).reshape(
+        1, 3, 1, 1
+    )
+    img = img / torch.tensor([0.229, 0.224, 0.225], device=img.device).reshape(
+        1, 3, 1, 1
+    )
     return img
 
 
@@ -41,7 +71,9 @@ def rotate_2d(pt_2d, rot_rad):
     return np.array([xx, yy], dtype=np.float32)
 
 
-def gen_trans_from_patch_cv(c_x, c_y, src_width, src_height, dst_width, dst_height, scale, rot, inv=False):
+def gen_trans_from_patch_cv(
+    c_x, c_y, src_width, src_height, dst_width, dst_height, scale, rot, inv=False
+):
     # augment size with scale
     src_w = src_width * scale
     src_h = src_height * scale
@@ -75,7 +107,9 @@ def gen_trans_from_patch_cv(c_x, c_y, src_width, src_height, dst_width, dst_heig
     return trans, trans_inv
 
 
-def generate_image_patch(cvimg, c_x, c_y, bb_width, bb_height, patch_width, patch_height, do_flip, scale, rot):
+def generate_image_patch(
+    cvimg, c_x, c_y, bb_width, bb_height, patch_width, patch_height, do_flip, scale, rot
+):
     img = cvimg.copy()
     img_height, img_width, img_channels = img.shape
 
@@ -87,6 +121,8 @@ def generate_image_patch(cvimg, c_x, c_y, bb_width, bb_height, patch_width, patc
         c_x, c_y, bb_width, bb_height, patch_width, patch_height, scale, rot, inv=False
     )
 
-    img_patch = cv2.warpAffine(img, trans, (int(patch_width), int(patch_height)), flags=cv2.INTER_LINEAR)
+    img_patch = cv2.warpAffine(
+        img, trans, (int(patch_width), int(patch_height)), flags=cv2.INTER_LINEAR
+    )
 
     return img_patch, trans, trans_inv

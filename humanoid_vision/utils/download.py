@@ -13,7 +13,9 @@ def _progress_bar(count, total):
     filled_len = int(round(bar_len * count / float(total)))
     percents = round(100.0 * count / float(total), 1)
     bar = "=" * filled_len + "-" * (bar_len - filled_len)
-    sys.stdout.write("  [{}] {}% of {:.1f}MB file  \r".format(bar, percents, total / 1024 / 1024))
+    sys.stdout.write(
+        "  [{}] {}% of {:.1f}MB file  \r".format(bar, percents, total / 1024 / 1024)
+    )
     sys.stdout.flush()
     if count >= total:
         sys.stdout.write("\n")

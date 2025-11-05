@@ -43,8 +43,12 @@ class SMPLHead(nn.Module):
         nn.init.xavier_uniform_(self.deccam.weight, gain=0.01)
 
         mean_params = np.load(cfg.SMPL.MEAN_PARAMS)
-        init_body_pose = torch.from_numpy(mean_params["pose"].astype(np.float32)).unsqueeze(0)
-        init_betas = torch.from_numpy(mean_params["shape"].astype("float32")).unsqueeze(0)
+        init_body_pose = torch.from_numpy(
+            mean_params["pose"].astype(np.float32)
+        ).unsqueeze(0)
+        init_betas = torch.from_numpy(mean_params["shape"].astype("float32")).unsqueeze(
+            0
+        )
         init_cam = torch.from_numpy(mean_params["cam"].astype(np.float32)).unsqueeze(0)
         self.register_buffer("init_body_pose", init_body_pose)
         self.register_buffer("init_betas", init_betas)
@@ -88,11 +92,17 @@ class SMPLHead(nn.Module):
 
         pred_smpl_params_list = {}
         pred_smpl_params_list["body_pose"] = torch.cat(
-            [rot6d_to_rotmat(pbp).view(batch_size, -1, 3, 3)[:, 1:, :, :] for pbp in pred_body_pose_list], dim=0
+            [
+                rot6d_to_rotmat(pbp).view(batch_size, -1, 3, 3)[:, 1:, :, :]
+                for pbp in pred_body_pose_list
+            ],
+            dim=0,
         )
         pred_smpl_params_list["betas"] = torch.cat(pred_betas_list, dim=0)
         pred_smpl_params_list["cam"] = torch.cat(pred_cam_list, dim=0)
-        pred_body_pose = rot6d_to_rotmat(pred_body_pose).view(batch_size, self.cfg.SMPL.NUM_BODY_JOINTS + 1, 3, 3)
+        pred_body_pose = rot6d_to_rotmat(pred_body_pose).view(
+            batch_size, self.cfg.SMPL.NUM_BODY_JOINTS + 1, 3, 3
+        )
 
         pred_smpl_params = {
             "global_orient": pred_body_pose[:, [0]],

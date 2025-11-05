@@ -1,5 +1,4 @@
 import copy
-from typing import Dict, List, Optional, Tuple
 
 import detectron2.data.transforms as T
 import torch
@@ -7,9 +6,9 @@ from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import CfgNode, instantiate
 from detectron2.data import MetadataCatalog
 from detectron2.engine import DefaultPredictor
-from detectron2.modeling import META_ARCH_REGISTRY, build_backbone
+from detectron2.modeling import META_ARCH_REGISTRY
 from detectron2.modeling.meta_arch import GeneralizedRCNN
-from detectron2.structures import BitMasks, Boxes, BoxMode, Instances
+from detectron2.structures import Boxes, Instances
 from omegaconf import OmegaConf
 
 __all__ = ["GeneralizedRCNN_with_proposals"]
@@ -17,7 +16,7 @@ __all__ = ["GeneralizedRCNN_with_proposals"]
 
 @META_ARCH_REGISTRY.register()
 class GeneralizedRCNN_with_proposals(GeneralizedRCNN):
-    def forward(self, batched_inputs: List[Dict[str, torch.Tensor]]):
+    def forward(self, batched_inputs: list[dict[str, torch.Tensor]]):
         if not self.training:
             return self.inference(batched_inputs)
 
@@ -29,7 +28,9 @@ class GeneralizedRCNN_with_proposals(GeneralizedRCNN):
 
         features = self.backbone(images.tensor)
         if self.proposal_generator is not None:
-            proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
+            proposals, proposal_losses = self.proposal_generator(
+                images, features, gt_instances
+            )
 
         else:
             assert "proposals" in batched_inputs[0]
@@ -49,8 +50,8 @@ class GeneralizedRCNN_with_proposals(GeneralizedRCNN):
 
     def inference(
         self,
-        batched_inputs: List[Dict[str, torch.Tensor]],
-        detected_instances: Optional[List[Instances]] = None,
+        batched_inputs: list[dict[str, torch.Tensor]],
+        detected_instances: list[Instances] | None = None,
         do_postprocess: bool = True,
     ):
         assert not self.training
@@ -67,7 +68,9 @@ class GeneralizedRCNN_with_proposals(GeneralizedRCNN):
 
         old_boxes = copy.deepcopy(detected_instances[0].pred_boxes.tensor)
         detected_instances_new[0].pred_boxes = copy.deepcopy(Boxes(old_boxes))
-        detected_instances_new[0].pred_classes = copy.deepcopy(detected_instances[0].pred_classes)
+        detected_instances_new[0].pred_classes = copy.deepcopy(
+            detected_instances[0].pred_classes
+        )
         detected_instances_new[0].scores = copy.deepcopy(detected_instances[0].scores)
         detected_instances_new[0].pred_boxes.scale(scale_x, scale_y)
 
@@ -81,11 +84,17 @@ class GeneralizedRCNN_with_proposals(GeneralizedRCNN):
             results, _ = self.roi_heads(images, features, proposals, None)
         else:
             detected_instances_new = [x.to(self.device) for x in detected_instances_new]
-            results = self.roi_heads.forward_with_given_boxes(features, detected_instances_new)
+            results = self.roi_heads.forward_with_given_boxes(
+                features, detected_instances_new
+            )
 
         if do_postprocess:
-            assert not torch.jit.is_scripting(), "Scripting is not supported for postprocess."
-            return GeneralizedRCNN._postprocess(results, batched_inputs, images.image_sizes)
+            assert (
+                not torch.jit.is_scripting()
+            ), "Scripting is not supported for postprocess."
+            return GeneralizedRCNN._postprocess(
+                results, batched_inputs, images.image_sizes
+            )
         else:
             return results
 
@@ -171,18 +180,25 @@ class DefaultPredictor_Lazy:
             checkpointer = DetectionCheckpointer(self.model)
             checkpointer.load(cfg.MODEL.WEIGHTS)
 
-            self.aug = T.ResizeShortestEdge([cfg.INPUT.MIN_SIZE_TEST, cfg.INPUT.MIN_SIZE_TEST], cfg.INPUT.MAX_SIZE_TEST)
+            self.aug = T.ResizeShortestEdge(
+                [cfg.INPUT.MIN_SIZE_TEST, cfg.INPUT.MIN_SIZE_TEST],
+                cfg.INPUT.MAX_SIZE_TEST,
+            )
 
             self.input_format = cfg.INPUT.FORMAT
         else:  # new LazyConfig
             self.cfg = cfg
             self.model = instantiate(cfg.model)
-            test_dataset = OmegaConf.select(cfg, "dataloader.test.dataset.names", default=None)
+            test_dataset = OmegaConf.select(
+                cfg, "dataloader.test.dataset.names", default=None
+            )
             if isinstance(test_dataset, (list, tuple)):
                 test_dataset = test_dataset[0]
 
             checkpointer = DetectionCheckpointer(self.model)
-            checkpointer.load(OmegaConf.select(cfg, "train.init_checkpoint", default=""))
+            checkpointer.load(
+                OmegaConf.select(cfg, "train.init_checkpoint", default="")
+            )
 
             mapper = instantiate(cfg.dataloader.test.mapper)
             self.aug = mapper.augmentations

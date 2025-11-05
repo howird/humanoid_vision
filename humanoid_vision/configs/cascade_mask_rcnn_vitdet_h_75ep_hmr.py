@@ -9,7 +9,9 @@ image_size = 1024
 dataloader = model_zoo.get_config("common/data/coco.py").dataloader
 dataloader.train.mapper.augmentations = [
     L(T.RandomFlip)(horizontal=True),  # flip first
-    L(T.ResizeScale)(min_scale=0.1, max_scale=2.0, target_height=image_size, target_width=image_size),
+    L(T.ResizeScale)(
+        min_scale=0.1, max_scale=2.0, target_height=image_size, target_width=image_size
+    ),
     L(T.FixedSizeCrop)(crop_size=(image_size, image_size), pad=False),
 ]
 dataloader.train.mapper.image_format = "RGB"
@@ -56,7 +58,9 @@ lr_multiplier = L(WarmupParamScheduler)(
 
 # Optimizer
 optimizer = model_zoo.get_config("common/optim.py").AdamW
-optimizer.params.lr_factor_func = partial(get_vit_lr_decay_rate, num_layers=12, lr_decay_rate=0.7)
+optimizer.params.lr_factor_func = partial(
+    get_vit_lr_decay_rate, num_layers=12, lr_decay_rate=0.7
+)
 optimizer.params.overrides = {"pos_embed": {"weight_decay": 0.0}}
 
 # cascade_mask_rcnn_vitdet_b_100ep.py
@@ -96,7 +100,8 @@ model.roi_heads.update(
         for (w1, w2) in [(10, 5), (20, 10), (30, 15)]
     ],
     proposal_matchers=[
-        L(Matcher)(thresholds=[th], labels=[0, 1], allow_low_quality_matches=False) for th in [0.5, 0.6, 0.7]
+        L(Matcher)(thresholds=[th], labels=[0, 1], allow_low_quality_matches=False)
+        for th in [0.5, 0.6, 0.7]
     ],
 )
 
@@ -104,7 +109,9 @@ model.roi_heads.update(
 
 from functools import partial
 
-train.init_checkpoint = "detectron2://ImageNetPretrained/MAE/mae_pretrain_vit_huge_p14to16.pth"
+train.init_checkpoint = (
+    "detectron2://ImageNetPretrained/MAE/mae_pretrain_vit_huge_p14to16.pth"
+)
 
 model.backbone.net.embed_dim = 1280
 model.backbone.net.depth = 32
@@ -115,10 +122,14 @@ model.backbone.net.window_block_indexes = (
     list(range(0, 7)) + list(range(8, 15)) + list(range(16, 23)) + list(range(24, 31))
 )
 
-optimizer.params.lr_factor_func = partial(get_vit_lr_decay_rate, lr_decay_rate=0.9, num_layers=32)
+optimizer.params.lr_factor_func = partial(
+    get_vit_lr_decay_rate, lr_decay_rate=0.9, num_layers=32
+)
 optimizer.params.overrides = {}
 optimizer.params.weight_decay_norm = None
 
 train.max_iter = train.max_iter * 3 // 4  # 100ep -> 75ep
-lr_multiplier.scheduler.milestones = [milestone * 3 // 4 for milestone in lr_multiplier.scheduler.milestones]
+lr_multiplier.scheduler.milestones = [
+    milestone * 3 // 4 for milestone in lr_multiplier.scheduler.milestones
+]
 lr_multiplier.scheduler.num_updates = train.max_iter

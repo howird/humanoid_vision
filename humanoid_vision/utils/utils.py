@@ -5,11 +5,12 @@ import os
 import pickle
 
 from pathlib import Path
-from typing import List
 
 import numpy as np
 import scipy.stats as stats
 import torch
+from jaxtyping import jaxtyped
+from beartype import beartype
 from rich.progress import (
     BarColumn,
     Progress,
@@ -24,12 +25,15 @@ from humanoid_vision.configs.base import CACHE_DIR
 from humanoid_vision.utils.utils_download import cache_url
 from humanoid_vision.utils.colors import phalp_colors, slahmr_colors
 from humanoid_vision.utils.pylogger_phalp import get_pylogger
+from humanoid_vision.common.types import PoseEmbed
 
 log = get_pylogger(__name__)
 
 
 def get_progress_bar(sequence, total=None, description=None, disable=False):
-    columns: List["ProgressColumn"] = [TextColumn("[progress.description]{task.description}")] if description else []
+    columns: list["ProgressColumn"] = (
+        [TextColumn("[progress.description]{task.description}")] if description else []
+    )
     columns.extend(
         (
             SpinnerColumn(spinner_name="runner"),
@@ -63,7 +67,9 @@ def get_progress_bar(sequence, total=None, description=None, disable=False):
 def progress_bar(sequence, total=None, description=None, disable=False):
     progress_bar = get_progress_bar(sequence, total, description, disable)
     with progress_bar:
-        yield from progress_bar.track(sequence, total=total, description=description, update_period=0.1)
+        yield from progress_bar.track(
+            sequence, total=total, description=description, update_period=0.1
+        )
 
 
 def numpy_to_torch_image(ndarray):
@@ -83,16 +89,28 @@ def get_colors(pallette="phalp"):
         else:
             raise ValueError("Invalid pallette")
 
-        RGB_tuples = np.vstack([colors, np.random.uniform(0, 255, size=(10000, 3)), [[0, 0, 0]]])
+        RGB_tuples = np.vstack(
+            [colors, np.random.uniform(0, 255, size=(10000, 3)), [[0, 0, 0]]]
+        )
         b = np.where(RGB_tuples == 0)
         RGB_tuples[b] = 1
     except:
         from colordict import ColorDict
 
         colormap = np.array(
-            list(ColorDict(norm=255, mode="rgb", palettes_path="", is_grayscale=False, palettes="all").values())
+            list(
+                ColorDict(
+                    norm=255,
+                    mode="rgb",
+                    palettes_path="",
+                    is_grayscale=False,
+                    palettes="all",
+                ).values()
+            )
         )
-        RGB_tuples = np.vstack([colormap[1:, :3], np.random.uniform(0, 255, size=(10000, 3)), [[0, 0, 0]]])
+        RGB_tuples = np.vstack(
+            [colormap[1:, :3], np.random.uniform(0, 255, size=(10000, 3)), [[0, 0, 0]]]
+        )
 
     return RGB_tuples
 
@@ -115,7 +133,11 @@ def get_prediction_interval(y, y_hat, x, x_hat):
     resid = y - y_hat
     s_err = np.sqrt(np.sum(resid**2) / (n - 2))  # standard deviation of the error
     t = stats.t.ppf(0.975, n - 2)  # used for CI and PI bands
-    pi = t * s_err * np.sqrt(1 + 1 / n + (x_hat - np.mean(x)) ** 2 / np.sum((x - np.mean(x)) ** 2))
+    pi = (
+        t
+        * s_err
+        * np.sqrt(1 + 1 / n + (x_hat - np.mean(x)) ** 2 / np.sum((x - np.mean(x)) ** 2))
+    )
     return pi
 
 
@@ -128,17 +150,27 @@ def pose_camera_vector_to_smpl(pose_camera_vector):
     )
     camera = pose_camera_vector[9 + 207 + 10 : 9 + 207 + 10 + 3].reshape(1, 3)
     camera[:, 2] *= 200.0
-    return {"global_orient": global_orient, "body_pose": body_pose, "betas": betas}, camera[0]
+    return {
+        "global_orient": global_orient,
+        "body_pose": body_pose,
+        "betas": betas,
+    }, camera[0]
 
 
-def smpl_to_pose_camera_vector(smpl_params, camera):
+@jaxtyped(typechecker=beartype)
+def smpl_to_pose_camera_vector(
+    smpl_params: dict[str, np.ndarray],
+    camera: torch.Tensor,
+) -> PoseEmbed:
     # convert smpl parameters to camera to pose_camera_vector for smoothness.
     global_orient_ = smpl_params["global_orient"].reshape(1, -1)  # 1x3x3 -> 9
     body_pose_ = smpl_params["body_pose"].reshape(1, -1)  # 23x3x3 -> 207
     shape_ = smpl_params["betas"].reshape(1, -1)  # 10 -> 10
     loca_ = copy.deepcopy(camera.view(1, -1))  # 3 -> 3
     loca_[:, 2] = loca_[:, 2] / 200.0
-    pose_embedding = np.concatenate((global_orient_, body_pose_, shape_, loca_.cpu().numpy()), 1)
+    pose_embedding = np.concatenate(
+        (global_orient_, body_pose_, shape_, loca_.cpu().numpy()), 1
+    )
     return pose_embedding
 
 

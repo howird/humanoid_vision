@@ -1,7 +1,8 @@
 import torch
 import pytorch_lightning as pl
 
-from typing import Dict, Tuple
+from jaxtyping import jaxtyped
+from beartype import beartype
 
 from smplx.utils import ModelOutput
 from yacs.config import CfgNode
@@ -80,11 +81,11 @@ class HMR2(pl.LightningModule):
 
     def configure_optimizers(
         self,
-    ) -> Tuple[torch.optim.Optimizer, torch.optim.Optimizer]:
+    ) -> tuple[torch.optim.Optimizer, torch.optim.Optimizer]:
         """
         Setup model and distriminator Optimizers
         Returns:
-            Tuple[torch.optim.Optimizer, torch.optim.Optimizer]: Model and discriminator optimizers
+            tuple[torch.optim.Optimizer, torch.optim.Optimizer]: Model and discriminator optimizers
         """
         param_groups = [
             {
@@ -106,11 +107,11 @@ class HMR2(pl.LightningModule):
 
         return optimizer, optimizer_disc
 
-    def forward_step(self, batch: Dict, train: bool = False) -> HMROutput:
+    def forward_step(self, batch: dict, train: bool = False) -> HMROutput:
         """
         Run a forward step of the network
         Args:
-            batch (Dict): Dictionary containing:
+            batch (dict): Dictionary containing:
                 - img: Input RGB image of shape (B, 3, H, W)
                 - mask: Optional segmentation mask of shape (B, H, W)
             train (bool): Flag indicating whether it is training or validation mode
@@ -177,12 +178,12 @@ class HMR2(pl.LightningModule):
         )
 
     def compute_loss(
-        self, batch: Dict, output: HMROutput, train: bool = True
+        self, batch: dict, output: HMROutput, train: bool = True
     ) -> torch.Tensor:
         """
         Compute losses given the input batch and the regression output
         Args:
-            batch (Dict): Dictionary containing:
+            batch (dict): Dictionary containing:
                 - img: Input RGB image of shape (B, 3, H, W)
                 - mask: Optional segmentation mask of shape (B, H, W)
                 - keypoints_2d: 2D keypoints of shape (B, N, 2)
@@ -258,7 +259,7 @@ class HMR2(pl.LightningModule):
     @pl.utilities.rank_zero.rank_zero_only
     def tensorboard_logging(
         self,
-        batch: Dict,
+        batch: dict,
         output: HMROutput,
         step_count: int,
         train: bool = True,
@@ -267,7 +268,7 @@ class HMR2(pl.LightningModule):
         """
         Log results to Tensorboard
         Args:
-            batch (Dict): Dictionary containing:
+            batch (dict): Dictionary containing:
                 - img: Input RGB image of shape (B, 3, H, W)
                 - mask: Optional segmentation mask of shape (B, H, W)
                 - keypoints_2d: 2D keypoints of shape (B, N, 2)
@@ -319,11 +320,12 @@ class HMR2(pl.LightningModule):
 
         return predictions
 
-    def forward(self, batch: Dict) -> HMROutput:
+    @jaxtyped(typechecker=beartype)
+    def forward(self, batch: dict) -> HMROutput:
         """
         Run a forward step of the network in val mode
         Args:
-            batch (Dict): Dictionary containing:
+            batch (dict): Dictionary containing:
                 - img: Input RGB image of shape (B, 3, H, W)
                 - mask: Optional segmentation mask of shape (B, H, W)
         Returns:
@@ -333,7 +335,7 @@ class HMR2(pl.LightningModule):
 
     def training_step_discriminator(
         self,
-        batch: Dict,
+        batch: dict,
         body_pose: torch.Tensor,
         betas: torch.Tensor,
         optimizer: torch.optim.Optimizer,
@@ -341,7 +343,7 @@ class HMR2(pl.LightningModule):
         """
         Run a discriminator training step
         Args:
-            batch (Dict): Dictionary containing mocap batch data
+            batch (dict): Dictionary containing mocap batch data
             body_pose (torch.Tensor): Regressed body pose from current step
             betas (torch.Tensor): Regressed betas from current step
             optimizer (torch.optim.Optimizer): Discriminator optimizer
@@ -363,11 +365,11 @@ class HMR2(pl.LightningModule):
         optimizer.step()
         return loss_disc.detach()
 
-    def training_step(self, joint_batch: Dict, batch_idx: int) -> HMROutput:
+    def training_step(self, joint_batch: dict, batch_idx: int) -> HMROutput:
         """
         Run a full training step
         Args:
-            joint_batch (Dict): Dictionary containing:
+            joint_batch (dict): Dictionary containing:
                 - img: Dictionary with:
                     - img: Input RGB image of shape (B, 3, H, W)
                     - mask: Optional segmentation mask of shape (B, H, W)
@@ -447,12 +449,12 @@ class HMR2(pl.LightningModule):
         return output
 
     def validation_step(
-        self, batch: Dict, batch_idx: int, dataloader_idx=0
+        self, batch: dict, batch_idx: int, dataloader_idx=0
     ) -> HMROutput:
         """
         Run a validation step and log to Tensorboard
         Args:
-            batch (Dict): Dictionary containing:
+            batch (dict): Dictionary containing:
                 - img: Input RGB image of shape (B, 3, H, W)
                 - mask: Optional segmentation mask of shape (B, H, W)
                 - keypoints_2d: 2D keypoints of shape (B, N, 2)

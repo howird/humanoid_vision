@@ -1,19 +1,28 @@
-from typing import Dict
-
 import cv2
 import numpy as np
 from skimage.filters import gaussian
 from yacs.config import CfgNode
 import torch
 
-from .utils import convert_cvimg_to_tensor, expand_to_aspect_ratio, generate_image_patch_cv2
+from .utils import (
+    convert_cvimg_to_tensor,
+    expand_to_aspect_ratio,
+    generate_image_patch_cv2,
+)
 
 DEFAULT_MEAN = 255.0 * torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
 DEFAULT_STD = 255.0 * torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
 
 
 class ViTDetDataset(torch.utils.data.Dataset):
-    def __init__(self, cfg: CfgNode, img_cv2: np.array, boxes: np.array, train: bool = False, **kwargs):
+    def __init__(
+        self,
+        cfg: CfgNode,
+        img_cv2: np.ndarray,
+        boxes: np.ndarray,
+        train: bool = False,
+        **kwargs,
+    ):
         super().__init__()
         self.cfg = cfg
         self.img_cv2 = img_cv2
@@ -34,14 +43,16 @@ class ViTDetDataset(torch.utils.data.Dataset):
     def __len__(self) -> int:
         return len(self.personid)
 
-    def __getitem__(self, idx: int) -> Dict[str, np.array]:
+    def __getitem__(self, idx: int) -> dict[str, np.array]:
         center = self.center[idx].copy()
         center_x = center[0]
         center_y = center[1]
 
         scale = self.scale[idx]
         BBOX_SHAPE = self.cfg.MODEL.get("BBOX_SHAPE", None)
-        bbox_size = expand_to_aspect_ratio(scale * 200, target_aspect_ratio=BBOX_SHAPE).max()
+        bbox_size = expand_to_aspect_ratio(
+            scale * 200, target_aspect_ratio=BBOX_SHAPE
+        ).max()
 
         patch_width = patch_height = self.img_size
 
@@ -54,7 +65,12 @@ class ViTDetDataset(torch.utils.data.Dataset):
             print(f"{downsampling_factor=}")
             downsampling_factor = downsampling_factor / 2.0
             if downsampling_factor > 1.1:
-                cvimg = gaussian(cvimg, sigma=(downsampling_factor - 1) / 2, channel_axis=2, preserve_range=True)
+                cvimg = gaussian(
+                    cvimg,
+                    sigma=(downsampling_factor - 1) / 2,
+                    channel_axis=2,
+                    preserve_range=True,
+                )
 
         img_patch_cv, trans = generate_image_patch_cv2(
             cvimg,
@@ -74,7 +90,9 @@ class ViTDetDataset(torch.utils.data.Dataset):
 
         # apply normalization
         for n_c in range(min(self.img_cv2.shape[2], 3)):
-            img_patch[n_c, :, :] = (img_patch[n_c, :, :] - self.mean[n_c]) / self.std[n_c]
+            img_patch[n_c, :, :] = (img_patch[n_c, :, :] - self.mean[n_c]) / self.std[
+                n_c
+            ]
 
         item = {
             "img": img_patch,

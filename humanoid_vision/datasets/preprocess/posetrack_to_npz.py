@@ -1,7 +1,5 @@
 # Adapted from https://raw.githubusercontent.com/nkolot/SPIN/master/datasets/preprocess/coco.py
 import os
-from os.path import join
-import sys
 import json
 import numpy as np
 from pathlib import Path
@@ -20,7 +18,9 @@ def coco_extract(dataset_path, out_path):
 
     # json annotation file
     SPLIT = "val"
-    json_paths = (Path(dataset_path) / "posetrack_data/annotations" / SPLIT).glob("*.json")
+    json_paths = (Path(dataset_path) / "posetrack_data/annotations" / SPLIT).glob(
+        "*.json"
+    )
     for json_path in json_paths:
         json_data = json.load(open(json_path, "r"))
 
@@ -66,9 +66,29 @@ def coco_extract(dataset_path, out_path):
 
     # NOTE: Posetrack val doesn't annotate ears (17,18)
     # But Posetrack does annotate head, neck so that wil have to live in extra_kps.
-    posetrack_to_op_extra = [0, 37, 38, 18, 17, 5, 2, 6, 3, 7, 4, 12, 9, 13, 10, 14, 11]  # Will contain 15 keypoints.
+    posetrack_to_op_extra = [
+        0,
+        37,
+        38,
+        18,
+        17,
+        5,
+        2,
+        6,
+        3,
+        7,
+        4,
+        12,
+        9,
+        13,
+        10,
+        14,
+        11,
+    ]  # Will contain 15 keypoints.
     all_keypoints_2d = np.zeros((len(parts_), 44, 3))
-    all_keypoints_2d[:, posetrack_to_op_extra] = np.stack(parts_)[:, : len(posetrack_to_op_extra), :3]
+    all_keypoints_2d[:, posetrack_to_op_extra] = np.stack(parts_)[
+        :, : len(posetrack_to_op_extra), :3
+    ]
     body_keypoints_2d = all_keypoints_2d[:, :25, :]
     extra_keypoints_2d = all_keypoints_2d[:, 25:, :]
 
@@ -91,4 +111,6 @@ def coco_extract(dataset_path, out_path):
 
 
 if __name__ == "__main__":
-    coco_extract("/shared/pavlakos/datasets/posetrack/posetrack2018/", "hmr2_evaluation_data/")
+    coco_extract(
+        "/shared/pavlakos/datasets/posetrack/posetrack2018/", "hmr2_evaluation_data/"
+    )

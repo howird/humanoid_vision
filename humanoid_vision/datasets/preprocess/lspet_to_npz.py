@@ -29,10 +29,17 @@ def hr_lspet_extract(dataset_path, out_path):
         # read keypoints
         part14 = joints[:, :2, i]
         # scale and center
-        bbox = [min(part14[:, 0]), min(part14[:, 1]), max(part14[:, 0]), max(part14[:, 1])]
+        bbox = [
+            min(part14[:, 0]),
+            min(part14[:, 1]),
+            max(part14[:, 0]),
+            max(part14[:, 1]),
+        ]
         center = [(bbox[2] + bbox[0]) / 2, (bbox[3] + bbox[1]) / 2]
         # scale = scaleFactor*max(bbox[2]-bbox[0], bbox[3]-bbox[1]) # Don't /200
-        scale = scaleFactor * np.array([bbox[2] - bbox[0], bbox[3] - bbox[1]])  # Don't /200
+        scale = scaleFactor * np.array(
+            [bbox[2] - bbox[0], bbox[3] - bbox[1]]
+        )  # Don't /200
         # update keypoints
         part = np.zeros([24, 3])
         part[:14] = np.hstack([part14, np.ones([14, 1])])

@@ -53,7 +53,9 @@ JOINT_NAME_PROB_THRESHOLDS = {
     "right_wrist": 1e-3,
 }
 
-JOINT_IDX_PROB_THRESHOLDS = torch.tensor([JOINT_NAME_PROB_THRESHOLDS[joint_name] for joint_name in JOINT_NAMES])
+JOINT_IDX_PROB_THRESHOLDS = torch.tensor(
+    [JOINT_NAME_PROB_THRESHOLDS[joint_name] for joint_name in JOINT_NAMES]
+)
 
 ###################################################################
 POSE_RANGE_MIN = -np.pi
@@ -64,18 +66,26 @@ AMASS_HIST100_PATH = "hmr2_training_data/amass_poses_hist100_SMPL+H_G.npy"
 if not os.path.exists(AMASS_HIST100_PATH):
     AMASS_HIST100_PATH = "/shared/shubham/code/hmr2023/amass_poses_hist100_SMPL+H_G.npy"
 if not os.path.exists(AMASS_HIST100_PATH):
-    AMASS_HIST100_PATH = "/fsx/shubham/code/stable-humans/notebooks/amass_poses_hist100_SMPL+H_G.npy"
+    AMASS_HIST100_PATH = (
+        "/fsx/shubham/code/stable-humans/notebooks/amass_poses_hist100_SMPL+H_G.npy"
+    )
 
 
 def create_pose_hist(poses: np.ndarray, nbins: int = 100) -> np.ndarray:
     N, K, C = poses.shape
     assert C == 3, poses.shape
-    poses_21x3 = normalize_axis_angle(torch.fromnumpy(poses).view(N * K, 3)).numpy().reshape(N, K, 3)
+    poses_21x3 = (
+        normalize_axis_angle(torch.fromnumpy(poses).view(N * K, 3))
+        .numpy()
+        .reshape(N, K, 3)
+    )
     assert (poses_21x3 > -np.pi).all() and (poses_21x3 < np.pi).all()
 
     Hs, Es = [], []
     for i in range(K):
-        H, edges = np.histogramdd(poses_21x3[:, i, :], bins=nbins, range=[(-np.pi, np.pi)] * 3)
+        H, edges = np.histogramdd(
+            poses_21x3[:, i, :], bins=nbins, range=[(-np.pi, np.pi)] * 3
+        )
         Hs.append(H)
         Es.append(edges)
     Hs = np.stack(Hs, axis=0)
@@ -88,12 +98,16 @@ def load_amass_hist_smooth(sigma=2) -> torch.Tensor:
     assert amass_poses_hist100.shape == (21, 100, 100, 100)
 
     nbins = amass_poses_hist100.shape[1]
-    amass_poses_hist100 = amass_poses_hist100 / amass_poses_hist100.sum() / (2 * np.pi / nbins) ** 3
+    amass_poses_hist100 = (
+        amass_poses_hist100 / amass_poses_hist100.sum() / (2 * np.pi / nbins) ** 3
+    )
 
     # Gaussian filter on amass_poses_hist100
     from scipy.ndimage import gaussian_filter
 
-    amass_poses_hist100_smooth = gaussian_filter(amass_poses_hist100.numpy(), sigma=sigma, mode="constant")
+    amass_poses_hist100_smooth = gaussian_filter(
+        amass_poses_hist100.numpy(), sigma=sigma, mode="constant"
+    )
     amass_poses_hist100_smooth = torch.from_numpy(amass_poses_hist100_smooth)
     return amass_poses_hist100_smooth
 
@@ -126,7 +140,9 @@ def normalize_axis_angle(poses: torch.Tensor) -> torch.Tensor:
     return axis_fixed * angle_fixed[:, None]
 
 
-def poses_to_joint_probs(poses: torch.Tensor, amass_poses_100_smooth: torch.Tensor) -> torch.Tensor:
+def poses_to_joint_probs(
+    poses: torch.Tensor, amass_poses_100_smooth: torch.Tensor
+) -> torch.Tensor:
     # poses: Nx69
     # amass_poses_100_smooth: 21xBINSxBINSxBINS
     # returns: poses_prob: Nx21
@@ -137,10 +153,16 @@ def poses_to_joint_probs(poses: torch.Tensor, amass_poses_100_smooth: torch.Tens
     nbins = amass_poses_100_smooth.shape[1]
     assert amass_poses_100_smooth.shape == (21, nbins, nbins, nbins)
 
-    poses_bin = (poses - POSE_RANGE_MIN) / (POSE_RANGE_MAX - POSE_RANGE_MIN) * (nbins - 1e-6)
+    poses_bin = (
+        (poses - POSE_RANGE_MIN) / (POSE_RANGE_MAX - POSE_RANGE_MIN) * (nbins - 1e-6)
+    )
     poses_bin = poses_bin.long().clip(0, nbins - 1)
-    joint_id = torch.arange(21, device=poses.device).view(1, 21).expand(N, 21).reshape(N * 21)
-    poses_prob = amass_poses_100_smooth[joint_id, poses_bin[:, 0], poses_bin[:, 1], poses_bin[:, 2]]
+    joint_id = (
+        torch.arange(21, device=poses.device).view(1, 21).expand(N, 21).reshape(N * 21)
+    )
+    poses_prob = amass_poses_100_smooth[
+        joint_id, poses_bin[:, 0], poses_bin[:, 1], poses_bin[:, 2]
+    ]
 
     poses_bad = ((poses < POSE_RANGE_MIN) | (poses >= POSE_RANGE_MAX)).any(dim=1)
     poses_prob[poses_bad] = 0
@@ -149,7 +171,9 @@ def poses_to_joint_probs(poses: torch.Tensor, amass_poses_100_smooth: torch.Tens
 
 
 def poses_check_probable(
-    poses: torch.Tensor, amass_poses_100_smooth: torch.Tensor, prob_thresholds: torch.Tensor = JOINT_IDX_PROB_THRESHOLDS
+    poses: torch.Tensor,
+    amass_poses_100_smooth: torch.Tensor,
+    prob_thresholds: torch.Tensor = JOINT_IDX_PROB_THRESHOLDS,
 ) -> torch.Tensor:
     N, C = poses.shape
     poses_norm = normalize_axis_angle(poses.reshape(N * (C // 3), 3)).reshape(N, C)

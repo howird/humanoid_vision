@@ -8,7 +8,6 @@ import numpy as np
 import pyrender
 import trimesh
 import cv2
-import torch.nn.functional as F
 
 from .render_openpose import render_openpose
 
@@ -36,7 +35,12 @@ def create_raymond_lights():
 
         matrix = np.eye(4)
         matrix[:3, :3] = np.c_[x, y, z]
-        nodes.append(pyrender.Node(light=pyrender.DirectionalLight(color=np.ones(3), intensity=1.0), matrix=matrix))
+        nodes.append(
+            pyrender.Node(
+                light=pyrender.DirectionalLight(color=np.ones(3), intensity=1.0),
+                matrix=matrix,
+            )
+        )
 
     return nodes
 
@@ -53,20 +57,34 @@ class MeshRenderer:
         self.camera_center = [self.img_res // 2, self.img_res // 2]
         self.faces = faces
 
-    def visualize(self, vertices, camera_translation, images, focal_length=None, nrow=3, padding=2):
+    def visualize(
+        self, vertices, camera_translation, images, focal_length=None, nrow=3, padding=2
+    ):
         images_np = np.transpose(images, (0, 2, 3, 1))
         rend_imgs = []
         for i in range(vertices.shape[0]):
             fl = self.focal_length
             rend_img = torch.from_numpy(
                 np.transpose(
-                    self.__call__(vertices[i], camera_translation[i], images_np[i], focal_length=fl, side_view=False),
+                    self.__call__(
+                        vertices[i],
+                        camera_translation[i],
+                        images_np[i],
+                        focal_length=fl,
+                        side_view=False,
+                    ),
                     (2, 0, 1),
                 )
             ).float()
             rend_img_side = torch.from_numpy(
                 np.transpose(
-                    self.__call__(vertices[i], camera_translation[i], images_np[i], focal_length=fl, side_view=True),
+                    self.__call__(
+                        vertices[i],
+                        camera_translation[i],
+                        images_np[i],
+                        focal_length=fl,
+                        side_view=True,
+                    ),
                     (2, 0, 1),
                 )
             ).float()
@@ -77,11 +95,21 @@ class MeshRenderer:
         return rend_imgs
 
     def visualize_tensorboard(
-        self, vertices, camera_translation, images, pred_keypoints, gt_keypoints, focal_length=None, nrow=5, padding=2
+        self,
+        vertices,
+        camera_translation,
+        images,
+        pred_keypoints,
+        gt_keypoints,
+        focal_length=None,
+        nrow=5,
+        padding=2,
     ):
         images_np = np.transpose(images, (0, 2, 3, 1))
         rend_imgs = []
-        pred_keypoints = np.concatenate((pred_keypoints, np.ones_like(pred_keypoints)[:, :, [0]]), axis=-1)
+        pred_keypoints = np.concatenate(
+            (pred_keypoints, np.ones_like(pred_keypoints)[:, :, [0]]), axis=-1
+        )
         pred_keypoints = self.img_res * (pred_keypoints + 0.5)
         gt_keypoints[:, :, :-1] = self.img_res * (gt_keypoints[:, :, :-1] + 0.5)
         keypoint_matches = [
@@ -104,13 +132,25 @@ class MeshRenderer:
             fl = self.focal_length
             rend_img = torch.from_numpy(
                 np.transpose(
-                    self.__call__(vertices[i], camera_translation[i], images_np[i], focal_length=fl, side_view=False),
+                    self.__call__(
+                        vertices[i],
+                        camera_translation[i],
+                        images_np[i],
+                        focal_length=fl,
+                        side_view=False,
+                    ),
                     (2, 0, 1),
                 )
             ).float()
             rend_img_side = torch.from_numpy(
                 np.transpose(
-                    self.__call__(vertices[i], camera_translation[i], images_np[i], focal_length=fl, side_view=True),
+                    self.__call__(
+                        vertices[i],
+                        camera_translation[i],
+                        images_np[i],
+                        focal_length=fl,
+                        side_view=True,
+                    ),
                     (2, 0, 1),
                 )
             ).float()
@@ -118,13 +158,20 @@ class MeshRenderer:
             extra_keypoints = pred_keypoints[i, -19:]
             for pair in keypoint_matches:
                 body_keypoints[pair[0], :] = extra_keypoints[pair[1], :]
-            pred_keypoints_img = render_openpose(255 * images_np[i].copy(), body_keypoints) / 255
+            pred_keypoints_img = (
+                render_openpose(255 * images_np[i].copy(), body_keypoints) / 255
+            )
             body_keypoints = gt_keypoints[i, :25]
             extra_keypoints = gt_keypoints[i, -19:]
             for pair in keypoint_matches:
-                if extra_keypoints[pair[1], -1] > 0 and body_keypoints[pair[0], -1] == 0:
+                if (
+                    extra_keypoints[pair[1], -1] > 0
+                    and body_keypoints[pair[0], -1] == 0
+                ):
                     body_keypoints[pair[0], :] = extra_keypoints[pair[1], :]
-            gt_keypoints_img = render_openpose(255 * images_np[i].copy(), body_keypoints) / 255
+            gt_keypoints_img = (
+                render_openpose(255 * images_np[i].copy(), body_keypoints) / 255
+            )
             rend_imgs.append(torch.from_numpy(images[i]))
             rend_imgs.append(rend_img)
             rend_imgs.append(rend_img_side)
@@ -146,7 +193,9 @@ class MeshRenderer:
         rot_angle=90,
     ):
         renderer = pyrender.OffscreenRenderer(
-            viewport_width=image.shape[1], viewport_height=image.shape[0], point_size=1.0
+            viewport_width=image.shape[1],
+            viewport_height=image.shape[0],
+            point_size=1.0,
         )
         material = pyrender.MetallicRoughnessMaterial(
             metallicFactor=0.0, alphaMode="OPAQUE", baseColorFactor=baseColorFactor
@@ -156,19 +205,25 @@ class MeshRenderer:
 
         mesh = trimesh.Trimesh(vertices.copy(), self.faces.copy())
         if side_view:
-            rot = trimesh.transformations.rotation_matrix(np.radians(rot_angle), [0, 1, 0])
+            rot = trimesh.transformations.rotation_matrix(
+                np.radians(rot_angle), [0, 1, 0]
+            )
             mesh.apply_transform(rot)
         rot = trimesh.transformations.rotation_matrix(np.radians(180), [1, 0, 0])
         mesh.apply_transform(rot)
         mesh = pyrender.Mesh.from_trimesh(mesh, material=material)
 
-        scene = pyrender.Scene(bg_color=[0.0, 0.0, 0.0, 0.0], ambient_light=(0.3, 0.3, 0.3))
+        scene = pyrender.Scene(
+            bg_color=[0.0, 0.0, 0.0, 0.0], ambient_light=(0.3, 0.3, 0.3)
+        )
         scene.add(mesh, "mesh")
 
         camera_pose = np.eye(4)
         camera_pose[:3, 3] = camera_translation
         camera_center = [image.shape[1] / 2.0, image.shape[0] / 2.0]
-        camera = pyrender.IntrinsicsCamera(fx=focal_length, fy=focal_length, cx=camera_center[0], cy=camera_center[1])
+        camera = pyrender.IntrinsicsCamera(
+            fx=focal_length, fy=focal_length, cx=camera_center[0], cy=camera_center[1]
+        )
         scene.add(camera, pose=camera_pose)
 
         light_nodes = create_raymond_lights()

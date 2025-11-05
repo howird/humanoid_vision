@@ -1,4 +1,3 @@
-import os
 import joblib
 import numpy as np
 import torch
@@ -83,7 +82,10 @@ def to_ava_labels(predictions, cfg):
         top_labels.append(label_)
         top_probs.append(pred_label[i].item())
 
-    label_str = ["{:0.0f}% : {}".format(np.round(p * 100.0, 2), l) for l, p in zip(top_labels, top_probs)]
+    label_str = [
+        "{:0.0f}% : {}".format(np.round(p * 100.0, 2), l)
+        for l, p in zip(top_labels, top_probs)
+    ]
 
     top_labels_all = []
     top_probs_all = []

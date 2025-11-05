@@ -6,17 +6,18 @@ Code was ported to Python from the official C++ implementation https://github.co
 import cv2
 import math
 import numpy as np
-from typing import List, Tuple
 
 
-def get_keypoints_rectangle(keypoints: np.array, threshold: float) -> Tuple[float, float, float]:
+def get_keypoints_rectangle(
+    keypoints: np.ndarray, threshold: float
+) -> tuple[float, float, float]:
     """
     Compute rectangle enclosing keypoints above the threshold.
     Args:
         keypoints (np.array): Keypoint array of shape (N, 3).
         threshold (float): Confidence visualization threshold.
     Returns:
-        Tuple[float, float, float]: Rectangle width, height and area.
+        tuple[float, float, float]: Rectangle width, height and area.
     """
     valid_ind = keypoints[:, -1] > threshold
     if valid_ind.sum() > 0:
@@ -34,15 +35,15 @@ def get_keypoints_rectangle(keypoints: np.array, threshold: float) -> Tuple[floa
 
 
 def render_keypoints(
-    img: np.array,
-    keypoints: np.array,
-    pairs: List,
-    colors: List,
+    img: np.ndarray,
+    keypoints: np.ndarray,
+    pairs: list,
+    colors: list,
     thickness_circle_ratio: float,
     thickness_line_ratio_wrt_circle: float,
-    pose_scales: List,
+    pose_scales: list,
     threshold: float = 0.1,
-) -> np.array:
+) -> np.ndarray:
     """
     Render keypoints on input image.
     Args:
@@ -66,19 +67,32 @@ def render_keypoints(
     numberColors = len(colors)
     thresholdRectangle = 0.1
 
-    person_width, person_height, person_area = get_keypoints_rectangle(keypoints, thresholdRectangle)
+    person_width, person_height, person_area = get_keypoints_rectangle(
+        keypoints, thresholdRectangle
+    )
     if person_area > 0:
         ratioAreas = min(1, max(person_width / width, person_height / height))
-        thicknessRatio = np.maximum(np.round(math.sqrt(area) * thickness_circle_ratio * ratioAreas), 2)
-        thicknessCircle = np.maximum(1, thicknessRatio if ratioAreas > 0.05 else -np.ones_like(thicknessRatio))
-        thicknessLine = np.maximum(1, np.round(thicknessRatio * thickness_line_ratio_wrt_circle))
+        thicknessRatio = np.maximum(
+            np.round(math.sqrt(area) * thickness_circle_ratio * ratioAreas), 2
+        )
+        thicknessCircle = np.maximum(
+            1, thicknessRatio if ratioAreas > 0.05 else -np.ones_like(thicknessRatio)
+        )
+        thicknessLine = np.maximum(
+            1, np.round(thicknessRatio * thickness_line_ratio_wrt_circle)
+        )
         radius = thicknessRatio / 2
 
         img = np.ascontiguousarray(img.copy())
         for i, pair in enumerate(pairs):
             index1, index2 = pair
             if keypoints[index1, -1] > threshold and keypoints[index2, -1] > threshold:
-                thicknessLineScaled = int(round(min(thicknessLine[index1], thicknessLine[index2]) * pose_scales[0]))
+                thicknessLineScaled = int(
+                    round(
+                        min(thicknessLine[index1], thicknessLine[index2])
+                        * pose_scales[0]
+                    )
+                )
                 colorIndex = index2
                 color = colors[colorIndex % numberColors]
                 keypoint1 = keypoints[index1, :-1].astype(np.int)
@@ -96,7 +110,9 @@ def render_keypoints(
             faceIndex = part
             if keypoints[faceIndex, -1] > threshold:
                 radiusScaled = int(round(radius[faceIndex] * pose_scales[0]))
-                thicknessCircleScaled = int(round(thicknessCircle[faceIndex] * pose_scales[0]))
+                thicknessCircleScaled = int(
+                    round(thicknessCircle[faceIndex] * pose_scales[0])
+                )
                 colorIndex = part
                 color = colors[colorIndex % numberColors]
                 center = keypoints[faceIndex, :-1].astype(np.int)
@@ -112,7 +128,7 @@ def render_keypoints(
     return img
 
 
-def render_body_keypoints(img: np.array, body_keypoints: np.array) -> np.array:
+def render_body_keypoints(img: np.ndarray, body_keypoints: np.ndarray) -> np.ndarray:
     """
     Render OpenPose body keypoints on input image.
     Args:
@@ -256,11 +272,18 @@ def render_body_keypoints(img: np.array, body_keypoints: np.array) -> np.array:
     colors = np.array(colors).reshape(-1, 3)
     pose_scales = [1]
     return render_keypoints(
-        img, body_keypoints, pairs, colors, thickness_circle_ratio, thickness_line_ratio_wrt_circle, pose_scales, 0.1
+        img,
+        body_keypoints,
+        pairs,
+        colors,
+        thickness_circle_ratio,
+        thickness_line_ratio_wrt_circle,
+        pose_scales,
+        0.1,
     )
 
 
-def render_openpose(img: np.array, body_keypoints: np.array) -> np.array:
+def render_openpose(img: np.ndarray, body_keypoints: np.ndarray) -> np.ndarray:
     """
     Render keypoints in the OpenPose format on input image.
     Args:

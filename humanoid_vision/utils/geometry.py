@@ -1,4 +1,3 @@
-from typing import Optional
 import torch
 from torch.nn import functional as F
 
@@ -79,8 +78,8 @@ def perspective_projection(
     points: torch.Tensor,
     translation: torch.Tensor,
     focal_length: torch.Tensor,
-    camera_center: Optional[torch.Tensor] = None,
-    rotation: Optional[torch.Tensor] = None,
+    camera_center: torch.Tensor | None = None,
+    rotation: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """
     Computes the perspective projection of a set of 3D points.
@@ -95,9 +94,15 @@ def perspective_projection(
     """
     batch_size = points.shape[0]
     if rotation is None:
-        rotation = torch.eye(3, device=points.device, dtype=points.dtype).unsqueeze(0).expand(batch_size, -1, -1)
+        rotation = (
+            torch.eye(3, device=points.device, dtype=points.dtype)
+            .unsqueeze(0)
+            .expand(batch_size, -1, -1)
+        )
     if camera_center is None:
-        camera_center = torch.zeros(batch_size, 2, device=points.device, dtype=points.dtype)
+        camera_center = torch.zeros(
+            batch_size, 2, device=points.device, dtype=points.dtype
+        )
     # Populate intrinsic camera matrix K.
     K = torch.zeros([batch_size, 3, 3], device=points.device, dtype=points.dtype)
     K[:, 0, 0] = focal_length[:, 0]

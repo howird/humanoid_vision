@@ -30,7 +30,16 @@ class Track:
     Mark this track as missed (no association at the current time step).
     """
 
-    def __init__(self, cfg, track_id, n_init, max_age, detection_data, detection_id=None, dims=None):
+    def __init__(
+        self,
+        cfg,
+        track_id,
+        n_init,
+        max_age,
+        detection_data,
+        detection_id=None,
+        dims=None,
+    ):
         self.cfg = cfg
         self.track_id = track_id
         self.hits = 1
@@ -42,13 +51,22 @@ class Track:
         self._n_init = n_init
         self._max_age = max_age
 
-        self.track_data = {"history": deque(maxlen=self.cfg.phalp.track_history), "prediction": {}}
+        self.track_data = {
+            "history": deque(maxlen=self.cfg.phalp.track_history),
+            "prediction": {},
+        }
         for _ in range(self.cfg.phalp.track_history):
             self.track_data["history"].append(detection_data)
 
-        self.track_data["prediction"]["appe"] = deque([detection_data["appe"]], maxlen=self.cfg.phalp.n_init + 1)
-        self.track_data["prediction"]["loca"] = deque([detection_data["loca"]], maxlen=self.cfg.phalp.n_init + 1)
-        self.track_data["prediction"]["pose"] = deque([detection_data["pose"]], maxlen=self.cfg.phalp.n_init + 1)
+        self.track_data["prediction"]["appe"] = deque(
+            [detection_data["appe"]], maxlen=self.cfg.phalp.n_init + 1
+        )
+        self.track_data["prediction"]["loca"] = deque(
+            [detection_data["loca"]], maxlen=self.cfg.phalp.n_init + 1
+        )
+        self.track_data["prediction"]["pose"] = deque(
+            [detection_data["pose"]], maxlen=self.cfg.phalp.n_init + 1
+        )
         self.track_data["prediction"]["uv"] = deque(
             [copy.deepcopy(detection_data["uv"])], maxlen=self.cfg.phalp.n_init + 1
         )
@@ -64,13 +82,19 @@ class Track:
 
     def add_predicted(self, appe=None, pose=None, loca=None, uv=None):
         appe_predicted = (
-            copy.deepcopy(appe.numpy()) if (appe is not None) else copy.deepcopy(self.track_data["history"][-1]["appe"])
+            copy.deepcopy(appe.numpy())
+            if (appe is not None)
+            else copy.deepcopy(self.track_data["history"][-1]["appe"])
         )
         loca_predicted = (
-            copy.deepcopy(loca.numpy()) if (loca is not None) else copy.deepcopy(self.track_data["history"][-1]["loca"])
+            copy.deepcopy(loca.numpy())
+            if (loca is not None)
+            else copy.deepcopy(self.track_data["history"][-1]["loca"])
         )
         pose_predicted = (
-            copy.deepcopy(pose.numpy()) if (pose is not None) else copy.deepcopy(self.track_data["history"][-1]["pose"])
+            copy.deepcopy(pose.numpy())
+            if (pose is not None)
+            else copy.deepcopy(self.track_data["history"][-1]["pose"])
         )
 
         self.track_data["prediction"]["appe"].append(appe_predicted)
@@ -78,13 +102,16 @@ class Track:
         self.track_data["prediction"]["pose"].append(pose_predicted)
 
     def update(self, detection, detection_id, shot):
-        self.track_data["history"].append(copy.deepcopy(detection.detection_data))
+        detection_payload = detection.as_legacy_dict()
+        self.track_data["history"].append(copy.deepcopy(detection_payload))
         if shot == 1:
             for tx in range(self.cfg.phalp.track_history):
-                self.track_data["history"][-1 - tx]["loca"] = copy.deepcopy(detection.detection_data["loca"])
+                self.track_data["history"][-1 - tx]["loca"] = copy.deepcopy(
+                    detection_payload["loca"]
+                )
 
         if "T" in self.cfg.phalp.predict:
-            mixing_alpha_ = self.cfg.phalp.alpha * (detection.detection_data["conf"] ** 2)
+            mixing_alpha_ = self.cfg.phalp.alpha * (detection_payload["conf"] ** 2)
             ones_old = self.track_data["prediction"]["uv"][-1][3:, :, :] == 1
             ones_new = self.track_data["history"][-1]["uv"][3:, :, :] == 1
             ones_old = np.repeat(ones_old, 3, 0)
@@ -96,14 +123,24 @@ class Track:
             new_rgb_map = np.zeros((3, 256, 256))
             new_mask_map = np.zeros((1, 256, 256)) - 1
             new_mask_map[ones_union[:1, :, :]] = 1.0
-            new_rgb_map[ones_intersect] = (1 - mixing_alpha_) * self.track_data["prediction"]["uv"][-1][:3, :, :][
-                ones_intersect
-            ] + mixing_alpha_ * self.track_data["history"][-1]["uv"][:3, :, :][ones_intersect]
-            new_rgb_map[good_old_ones] = self.track_data["prediction"]["uv"][-1][:3, :, :][good_old_ones]
-            new_rgb_map[good_new_ones] = self.track_data["history"][-1]["uv"][:3, :, :][good_new_ones]
-            self.track_data["prediction"]["uv"].append(np.concatenate((new_rgb_map, new_mask_map), 0))
+            new_rgb_map[ones_intersect] = (1 - mixing_alpha_) * self.track_data[
+                "prediction"
+            ]["uv"][-1][:3, :, :][ones_intersect] + mixing_alpha_ * self.track_data[
+                "history"
+            ][-1]["uv"][:3, :, :][ones_intersect]
+            new_rgb_map[good_old_ones] = self.track_data["prediction"]["uv"][-1][
+                :3, :, :
+            ][good_old_ones]
+            new_rgb_map[good_new_ones] = self.track_data["history"][-1]["uv"][:3, :, :][
+                good_new_ones
+            ]
+            self.track_data["prediction"]["uv"].append(
+                np.concatenate((new_rgb_map, new_mask_map), 0)
+            )
         else:
-            self.track_data["prediction"]["uv"].append(self.track_data["history"][-1]["uv"])
+            self.track_data["prediction"]["uv"].append(
+                self.track_data["history"][-1]["uv"]
+            )
 
         self.hits += 1
         self.time_since_update = 0
@@ -111,7 +148,7 @@ class Track:
             self.state = TrackState.Confirmed
 
         # if the detection has annotation, then we set the track state to confirmed
-        if len(detection.detection_data["annotations"]) > 0:
+        if len(detection_payload["annotations"]) > 0:
             self.state = TrackState.Confirmed
 
     def mark_missed(self):

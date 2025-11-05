@@ -1,14 +1,29 @@
 import torch
 import numpy as np
-from typing import Tuple, List, Dict, Any
+from typing import Any
+
+from jaxtyping import Float, UInt8, jaxtyped
+from beartype import beartype
 
 from pycocotools import mask as mask_utils
 from humanoid_vision.utils.utils_dataset import process_image, process_mask
+from humanoid_vision.common.types import BBox, MaskArray
 
 
+@jaxtyped(typechecker=beartype)
 def get_cropped_image(
-    image: np.ndarray, bbox: np.ndarray, bbox_pad: np.ndarray, seg_mask: np.ndarray
-) -> Tuple[torch.Tensor, np.ndarray, np.ndarray, List[Dict[str, Any]], np.ndarray, np.ndarray]:
+    image: UInt8[np.ndarray, "height width 3"],
+    bbox: BBox,
+    bbox_pad: BBox,
+    seg_mask: MaskArray,
+) -> tuple[
+    Float[torch.Tensor, "4 256 256"],
+    Float[np.ndarray, "2"],
+    Float[np.ndarray, "2"],
+    list[dict[str, Any]],
+    Float[np.ndarray, "2"],
+    Float[np.ndarray, "2"],
+]:
     """Process an image and a single instance's bounding box and segmentation mask.
 
     1. Encodes the segmentation mask using RLE (Run-Length Encoding)
@@ -25,7 +40,7 @@ def get_cropped_image(
         masked_image: Processed image tensor with mask channel of shape (4, H', W')
         center_: Center coordinates of the original bounding box of shape (2,)
         scale_: Scale factors of the original bounding box of shape (2,)
-        rles: List of run-length encoded segmentation masks, each containing 'counts' and 'size' keys
+        rles: list of run-length encoded segmentation masks, each containing 'counts' and 'size' keys
         center_pad: Center coordinates of the padded bounding box of shape (2,)
         scale_pad: Scale factors of the padded bounding box of shape (2,)
     """
@@ -44,9 +59,13 @@ def get_cropped_image(
     center_ = np.array([(bbox[2] + bbox[0]) / 2, (bbox[3] + bbox[1]) / 2])
     scale_ = np.array([(bbox[2] - bbox[0]), (bbox[3] - bbox[1])])
 
-    center_pad = np.array([(bbox_pad[2] + bbox_pad[0]) / 2, (bbox_pad[3] + bbox_pad[1]) / 2])
+    center_pad = np.array(
+        [(bbox_pad[2] + bbox_pad[0]) / 2, (bbox_pad[3] + bbox_pad[1]) / 2]
+    )
     scale_pad = np.array([(bbox_pad[2] - bbox_pad[0]), (bbox_pad[3] - bbox_pad[1])])
-    mask_tmp = process_mask(seg_mask.astype(np.uint8), center_pad, 1.0 * np.max(scale_pad))
+    mask_tmp = process_mask(
+        seg_mask.astype(np.uint8), center_pad, 1.0 * np.max(scale_pad)
+    )
     image_tmp = process_image(image, center_pad, 1.0 * np.max(scale_pad))
 
     masked_image = torch.cat((image_tmp, mask_tmp[:1, :, :]), 0)

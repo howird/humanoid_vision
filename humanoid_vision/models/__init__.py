@@ -11,7 +11,10 @@ def download_models(folder=CACHE_DIR_4DHUMANS):
 
     os.makedirs(folder, exist_ok=True)
     download_files = {
-        "hmr2_data.tar.gz": ["https://people.eecs.berkeley.edu/~jathushan/projects/4dhumans/hmr2_data.tar.gz", folder],
+        "hmr2_data.tar.gz": [
+            "https://people.eecs.berkeley.edu/~jathushan/projects/4dhumans/hmr2_data.tar.gz",
+            folder,
+        ],
     }
 
     for file_name, url in download_files.items():
@@ -33,7 +36,7 @@ def check_smpl_exists():
 
     candidates = [
         f"{CACHE_DIR_4DHUMANS}/data/smpl/SMPL_NEUTRAL.pkl",
-        f"data/basicModel_neutral_lbs_10_207_0_v1.0.0.pkl",
+        "data/basicModel_neutral_lbs_10_207_0_v1.0.0.pkl",
     ]
     candidates_exist = [os.path.exists(c) for c in candidates]
     if not any(candidates_exist):
@@ -80,7 +83,9 @@ def load_hmr2(checkpoint_path=DEFAULT_CHECKPOINT):
     model_cfg = get_config(model_cfg, update_cachedir=True)
 
     # Override some config values, to crop bbox correctly
-    if (model_cfg.MODEL.BACKBONE.TYPE == "vit") and ("BBOX_SHAPE" not in model_cfg.MODEL):
+    if (model_cfg.MODEL.BACKBONE.TYPE == "vit") and (
+        "BBOX_SHAPE" not in model_cfg.MODEL
+    ):
         model_cfg.defrost()
         assert (
             model_cfg.MODEL.IMAGE_SIZE == 256

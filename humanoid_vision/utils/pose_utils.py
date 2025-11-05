@@ -4,7 +4,6 @@ Code adapted from: https://github.com/akanazawa/hmr/blob/master/src/benchmark/ev
 
 import torch
 import numpy as np
-from typing import Optional, Dict, List, Tuple
 
 
 def compute_similarity_transform(S1: torch.Tensor, S2: torch.Tensor) -> torch.Tensor:
@@ -59,7 +58,7 @@ def compute_similarity_transform(S1: torch.Tensor, S2: torch.Tensor) -> torch.Te
     return S1_hat.permute(0, 2, 1)
 
 
-def reconstruction_error(S1, S2) -> np.array:
+def reconstruction_error(S1, S2) -> np.ndarray:
     """
     Computes the mean Euclidean distance of 2 set of points S1, S2 after performing Procrustes alignment.
     Args:
@@ -73,17 +72,22 @@ def reconstruction_error(S1, S2) -> np.array:
     return re
 
 
-def eval_pose(pred_joints, gt_joints) -> Tuple[np.array, np.array]:
+def eval_pose(pred_joints, gt_joints) -> tuple[np.array, np.array]:
     """
     Compute joint errors in mm before and after Procrustes alignment.
     Args:
         pred_joints (torch.Tensor): Predicted 3D joints of shape (B, N, 3).
         gt_joints (torch.Tensor): Ground truth 3D joints of shape (B, N, 3).
     Returns:
-        Tuple[np.array, np.array]: Joint errors in mm before and after alignment.
+        tuple[np.array, np.array]: Joint errors in mm before and after alignment.
     """
     # Absolute error (MPJPE)
-    mpjpe = torch.sqrt(((pred_joints - gt_joints) ** 2).sum(dim=-1)).mean(dim=-1).cpu().numpy()
+    mpjpe = (
+        torch.sqrt(((pred_joints - gt_joints) ** 2).sum(dim=-1))
+        .mean(dim=-1)
+        .cpu()
+        .numpy()
+    )
 
     # Reconstruction_error
     r_error = reconstruction_error(pred_joints, gt_joints).cpu().numpy()
@@ -94,18 +98,18 @@ class Evaluator:
     def __init__(
         self,
         dataset_length: int,
-        keypoint_list: List,
+        keypoint_list: list,
         pelvis_ind: int,
-        metrics: List = ["mode_mpjpe", "mode_re", "min_mpjpe", "min_re"],
-        pck_thresholds: Optional[List] = None,
+        metrics: list = ["mode_mpjpe", "mode_re", "min_mpjpe", "min_re"],
+        pck_thresholds: list | None = None,
     ):
         """
         Class used for evaluating trained models on different 3D pose datasets.
         Args:
             dataset_length (int): Total dataset length.
-            keypoint_list [List]: List of keypoints used for evaluation.
+            keypoint_list [list]: List of keypoints used for evaluation.
             pelvis_ind (int): Index of pelvis keypoint; used for aligning the predictions and ground truth.
-            metrics [List]: List of evaluation metrics to record.
+            metrics [list]: List of evaluation metrics to record.
         """
         self.dataset_length = dataset_length
         self.keypoint_list = keypoint_list
@@ -137,24 +141,27 @@ class Evaluator:
             print(f"{metric}: {getattr(self, metric)[: self.counter].mean()} {unit}")
         print("***")
 
-    def get_metrics_dict(self) -> Dict:
+    def get_metrics_dict(self) -> dict:
         """
         Returns:
-            Dict: Dictionary of evaluation metrics.
+            dict: Dictionary of evaluation metrics.
         """
-        d1 = {metric: getattr(self, metric)[: self.counter].mean() for metric in self.metrics}
+        d1 = {
+            metric: getattr(self, metric)[: self.counter].mean()
+            for metric in self.metrics
+        }
         if self.pck_evaluator is not None:
             d2 = self.pck_evaluator.get_metrics_dict()
             d1.update(d2)
         return d1
 
-    def __call__(self, output: Dict, batch: Dict, opt_output: Optional[Dict] = None):
+    def __call__(self, output: dict, batch: dict, opt_output: dict | None = None):
         """
         Evaluate current batch.
         Args:
-            output (Dict): Regression output.
-            batch (Dict): Dictionary containing images and their corresponding annotations.
-            opt_output (Dict): Optimization output.
+            output (dict): Regression output.
+            batch (dict): Dictionary containing images and their corresponding annotations.
+            opt_output (dict): Optimization output.
         """
         if self.pck_evaluator is not None:
             self.pck_evaluator(output, batch, opt_output)
@@ -163,7 +170,9 @@ class Evaluator:
         pred_keypoints_3d = pred_keypoints_3d[:, None, :, :]
         batch_size = pred_keypoints_3d.shape[0]
         num_samples = pred_keypoints_3d.shape[1]
-        gt_keypoints_3d = batch["keypoints_3d"][:, :, :-1].unsqueeze(1).repeat(1, num_samples, 1, 1)
+        gt_keypoints_3d = (
+            batch["keypoints_3d"][:, :, :-1].unsqueeze(1).repeat(1, num_samples, 1, 1)
+        )
 
         # Align predictions and ground truth such that the pelvis location is at the origin
         pred_keypoints_3d -= pred_keypoints_3d[:, :, [self.pelvis_ind]]
@@ -171,8 +180,12 @@ class Evaluator:
 
         # Compute joint errors
         mpjpe, re = eval_pose(
-            pred_keypoints_3d.reshape(batch_size * num_samples, -1, 3)[:, self.keypoint_list],
-            gt_keypoints_3d.reshape(batch_size * num_samples, -1, 3)[:, self.keypoint_list],
+            pred_keypoints_3d.reshape(batch_size * num_samples, -1, 3)[
+                :, self.keypoint_list
+            ],
+            gt_keypoints_3d.reshape(batch_size * num_samples, -1, 3)[
+                :, self.keypoint_list
+            ],
         )
         mpjpe = mpjpe.reshape(batch_size, num_samples)
         re = re.reshape(batch_size, num_samples)
@@ -180,11 +193,13 @@ class Evaluator:
         # Compute 2d keypoint errors
         pred_keypoints_2d = output["pred_keypoints_2d"].detach()
         pred_keypoints_2d = pred_keypoints_2d[:, None, :, :]
-        gt_keypoints_2d = batch["keypoints_2d"][:, None, :, :].repeat(1, num_samples, 1, 1)
-        conf = gt_keypoints_2d[:, :, :, -1].clone()
-        kp_err = torch.nn.functional.mse_loss(pred_keypoints_2d, gt_keypoints_2d[:, :, :, :-1], reduction="none").sum(
-            dim=3
+        gt_keypoints_2d = batch["keypoints_2d"][:, None, :, :].repeat(
+            1, num_samples, 1, 1
         )
+        conf = gt_keypoints_2d[:, :, :, -1].clone()
+        kp_err = torch.nn.functional.mse_loss(
+            pred_keypoints_2d, gt_keypoints_2d[:, :, :, :-1], reduction="none"
+        ).sum(dim=3)
         kp_l2_loss = (conf * kp_err).mean(dim=2)
         kp_l2_loss = kp_l2_loss.detach().cpu().numpy()
 
@@ -193,7 +208,8 @@ class Evaluator:
             opt_keypoints_3d = opt_output["model_joints"]
             opt_keypoints_3d -= opt_keypoints_3d[:, [self.pelvis_ind]]
             opt_mpjpe, opt_re = eval_pose(
-                opt_keypoints_3d[:, self.keypoint_list], gt_keypoints_3d[:, 0, self.keypoint_list]
+                opt_keypoints_3d[:, self.keypoint_list],
+                gt_keypoints_3d[:, 0, self.keypoint_list],
             )
 
         # The 0-th sample always corresponds to the mode
@@ -234,13 +250,13 @@ class Evaluator:
 class EvaluatorPCK:
     def __init__(
         self,
-        thresholds: List = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5],
+        thresholds: list = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5],
     ):
         """
         Class used for evaluating trained models on different 3D pose datasets.
         Args:
-            thresholds [List]: List of PCK thresholds to evaluate.
-            metrics [List]: List of evaluation metrics to record.
+            thresholds [list]: List of PCK thresholds to evaluate.
+            metrics [list]: List of evaluation metrics to record.
         """
         self.thresholds = thresholds
         self.pred_kp_2d = []
@@ -261,15 +277,17 @@ class EvaluatorPCK:
             print(f"{metric}: {metrics_dict[metric]}")
         print("***")
 
-    def get_metrics_dict(self) -> Dict:
+    def get_metrics_dict(self) -> dict:
         """
         Returns:
-            Dict: Dictionary of evaluation metrics.
+            dict: Dictionary of evaluation metrics.
         """
         pcks = self.compute_pcks()
         metrics = {}
         for thr, (acc, avg_acc, cnt) in zip(self.thresholds, pcks):
-            metrics.update({f"kp{i}_pck_{thr}": float(a) for i, a in enumerate(acc) if a >= 0})
+            metrics.update(
+                {f"kp{i}_pck_{thr}": float(a) for i, a in enumerate(acc) if a >= 0}
+            )
             metrics.update({f"kpAvg_pck_{thr}": float(avg_acc)})
         return metrics
 
@@ -289,33 +307,46 @@ class EvaluatorPCK:
                 gt_kp_2d[:, 0, :, :],
                 gt_conf_2d[:, 0, :] > 0.5,
                 thr=thr,
-                normalize=np.ones((len(pred_kp_2d), 2)),  # Already in [-0.5,0.5] range. No need to normalize
+                normalize=np.ones(
+                    (len(pred_kp_2d), 2)
+                ),  # Already in [-0.5,0.5] range. No need to normalize
             )
             for thr in self.thresholds
         ]
         return pcks
 
-    def __call__(self, output: Dict, batch: Dict, opt_output: Optional[Dict] = None):
+    def __call__(self, output: dict, batch: dict, opt_output: dict | None = None):
         """
         Evaluate current batch.
         Args:
-            output (Dict): Regression output.
-            batch (Dict): Dictionary containing images and their corresponding annotations.
-            opt_output (Dict): Optimization output.
+            output (dict): Regression output.
+            batch (dict): Dictionary containing images and their corresponding annotations.
+            opt_output (dict): Optimization output.
         """
         pred_keypoints_2d = output["pred_keypoints_2d"].detach()
         num_samples = 1
         batch_size = pred_keypoints_2d.shape[0]
 
         pred_keypoints_2d = pred_keypoints_2d[:, None, :, :]
-        gt_keypoints_2d = batch["keypoints_2d"][:, None, :, :].repeat(1, num_samples, 1, 1)
+        gt_keypoints_2d = batch["keypoints_2d"][:, None, :, :].repeat(
+            1, num_samples, 1, 1
+        )
 
-        gt_bbox_expand_factor = batch["box_size"] / (batch["_scale"] * 200).max(dim=-1).values
-        gt_bbox_expand_factor = gt_bbox_expand_factor[:, None, None, None].repeat(1, num_samples, 1, 1)
+        gt_bbox_expand_factor = (
+            batch["box_size"] / (batch["_scale"] * 200).max(dim=-1).values
+        )
+        gt_bbox_expand_factor = gt_bbox_expand_factor[:, None, None, None].repeat(
+            1, num_samples, 1, 1
+        )
         gt_bbox_expand_factor = gt_bbox_expand_factor.detach().cpu().numpy()
 
-        self.pred_kp_2d.append(pred_keypoints_2d[:, :, :, :2].detach().cpu().numpy() * gt_bbox_expand_factor)
+        self.pred_kp_2d.append(
+            pred_keypoints_2d[:, :, :, :2].detach().cpu().numpy()
+            * gt_bbox_expand_factor
+        )
         self.gt_conf_2d.append(gt_keypoints_2d[:, :, :, -1].detach().cpu().numpy())
-        self.gt_kp_2d.append(gt_keypoints_2d[:, :, :, :2].detach().cpu().numpy() * gt_bbox_expand_factor)
+        self.gt_kp_2d.append(
+            gt_keypoints_2d[:, :, :, :2].detach().cpu().numpy() * gt_bbox_expand_factor
+        )
 
         self.counter += batch_size

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Literal, Tuple, Dict, List
+from typing import Literal
 
 CACHE_DIR = Path.home() / ".cache"
 
@@ -11,7 +11,7 @@ class VideoIOConfig:
 
     extract_video: bool = True
     delete_frame_dir: bool = False
-    base_path: Optional[Path] = None
+    base_path: Path | None = None
 
     start_frame: int = 0
     end_frame: int = 1300
@@ -36,7 +36,7 @@ class VideoIOConfig:
 @dataclass
 class PHALPConfig:
     # Predictions methods: T: UV image, P: pose, L: location
-    predict: Tuple[Literal["T", "P", "L"], ...] = ("T", "P", "L")
+    predict: tuple[Literal["T", "P", "L"], ...] = ("T", "P", "L")
     # Distance metric for poses
     pose_distance: Literal["smpl", "joints"] = "smpl"
     distance_type: Literal["EQ_019"] = "EQ_019"
@@ -153,14 +153,14 @@ class BackboneConfig:
     TYPE: str = "vit"
     NUM_LAYERS: int = 50
     OUT_CHANNELS: int = 2048
-    PRETRAINED_WEIGHTS: Optional[Path] = None
+    PRETRAINED_WEIGHTS: Path | None = None
 
 
 @dataclass
 class ModelConfig:
     IMAGE_SIZE: int = 256
-    IMAGE_MEAN: Tuple[float, float, float] = (0.485, 0.456, 0.406)
-    IMAGE_STD: Tuple[float, float, float] = (0.229, 0.224, 0.225)
+    IMAGE_MEAN: tuple[float, float, float] = (0.485, 0.456, 0.406)
+    IMAGE_STD: tuple[float, float, float] = (0.229, 0.224, 0.225)
     SMPL_HEAD: SMPLHeadConfig = field(default_factory=SMPLHeadConfig)
     BACKBONE: BackboneConfig = field(default_factory=BackboneConfig)
     pose_transformer_size: int = 2048
@@ -189,10 +189,10 @@ class PhalpConfig:
     num_tasks: int = 100
     verbose: bool = False
     detect_shots: bool = False
-    video_seq: Optional[str] = None
+    video_seq: str | None = None
 
     # Target aspect ratio for bounding boxes (width, height)
-    expand_bbox_shape: Optional[Tuple[int, int]] = (192, 256)
+    expand_bbox_shape: tuple[int, int] | None = (192, 256)
 
     # Fields
     video_io: VideoIOConfig = field(default_factory=VideoIOConfig)
@@ -214,29 +214,29 @@ class PhalpConfig:
 class DatasetTrainConfig:
     """Configuration for training datasets."""
 
-    H36M_TRAIN_WMASK: Dict[str, float] = field(default_factory=lambda: {"WEIGHT": 0.1})
-    MPII_TRAIN_WMASK: Dict[str, float] = field(default_factory=lambda: {"WEIGHT": 0.1})
-    COCO_TRAIN_2014_WMASK_PRUNED: Dict[str, float] = field(
+    H36M_TRAIN_WMASK: dict[str, float] = field(default_factory=lambda: {"WEIGHT": 0.1})
+    MPII_TRAIN_WMASK: dict[str, float] = field(default_factory=lambda: {"WEIGHT": 0.1})
+    COCO_TRAIN_2014_WMASK_PRUNED: dict[str, float] = field(
         default_factory=lambda: {"WEIGHT": 0.1}
     )
-    COCO_TRAIN_2014_VITPOSE_REPLICATE_PRUNED12: Dict[str, float] = field(
+    COCO_TRAIN_2014_VITPOSE_REPLICATE_PRUNED12: dict[str, float] = field(
         default_factory=lambda: {"WEIGHT": 0.1}
     )
-    MPI_INF_TRAIN_PRUNED: Dict[str, float] = field(
+    MPI_INF_TRAIN_PRUNED: dict[str, float] = field(
         default_factory=lambda: {"WEIGHT": 0.02}
     )
-    AVA_TRAIN_MIDFRAMES_1FPS_WMASK: Dict[str, float] = field(
+    AVA_TRAIN_MIDFRAMES_1FPS_WMASK: dict[str, float] = field(
         default_factory=lambda: {"WEIGHT": 0.19}
     )
-    AIC_TRAIN_WMASK: Dict[str, float] = field(default_factory=lambda: {"WEIGHT": 0.19})
-    INSTA_TRAIN_WMASK: Dict[str, float] = field(default_factory=lambda: {"WEIGHT": 0.2})
+    AIC_TRAIN_WMASK: dict[str, float] = field(default_factory=lambda: {"WEIGHT": 0.19})
+    INSTA_TRAIN_WMASK: dict[str, float] = field(default_factory=lambda: {"WEIGHT": 0.2})
 
 
 @dataclass
 class DatasetValConfig:
     """Configuration for validation datasets."""
 
-    COCO_VAL: Dict[str, float] = field(default_factory=lambda: {"WEIGHT": 1.0})
+    COCO_VAL: dict[str, float] = field(default_factory=lambda: {"WEIGHT": 1.0})
 
 
 @dataclass
@@ -349,11 +349,11 @@ class TrainConfig(PhalpConfig):
     """Configuration for training the model."""
 
     task_name: str = "train"
-    tags: List[str] = field(default_factory=lambda: ["dev"])
+    tags: list[str] = field(default_factory=lambda: ["dev"])
     train: bool = True
     test: bool = False
-    ckpt_path: Optional[str] = None
-    seed: Optional[int] = None
+    ckpt_path: str | None = None
+    seed: int | None = None
 
     # Nested configurations
     TRAINING: TrainingConfig = field(default_factory=TrainingConfig)

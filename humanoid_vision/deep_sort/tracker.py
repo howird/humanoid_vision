@@ -3,8 +3,6 @@ Modified code from https://github.com/nwojke/deep_sort
 """
 
 from __future__ import absolute_import
-from typing import List, Optional, Tuple
-
 import torch
 import numpy as np
 
@@ -48,7 +46,7 @@ class Tracker:
         Number of frames that a track remains in initialization phase.
     kf : kalman_filter.KalmanFilter
         A Kalman filter to filter target trajectories in image space.
-    tracks : List[Track]
+    tracks : list[Track]
         The list of active tracks at the current time step.
 
     """
@@ -60,7 +58,7 @@ class Tracker:
         pose_predictor: PoseTransformerV2,
         max_age=30,
         n_init=3,
-        dims: Optional[Tuple[int, int, int]] = None,
+        dims: tuple[int, int, int] | None = None,
     ):
         self.cfg = cfg
         self.metric = NearestNeighborDistanceMetric(
@@ -73,7 +71,7 @@ class Tracker:
         )
         self.max_age = max_age
         self.n_init = n_init
-        self.tracks: List[Track] = []
+        self.tracks: list[Track] = []
         self._next_id = 1
         self.tracked_cost = {}
         self.pose_predictor = pose_predictor
@@ -88,12 +86,18 @@ class Tracker:
         for track in self.tracks:
             track.predict(increase_age=True)
 
-    def update(self, detections: List[Detection], frame_t, image_name, shot):
+    def update(
+        self,
+        detections: list[Detection],
+        frame_t: int,
+        image_name: str,
+        shot: int,
+    ) -> list[tuple[int, int]]:
         """Perform measurement update and track management.
 
         Parameters
         ----------
-        detections : List[deep_sort.detection.Detection]
+        detections : list[deep_sort.detection.Detection]
             A list of detections at the current time step.
 
         """
@@ -158,7 +162,9 @@ class Tracker:
 
         return matches
 
-    def _match(self, detections):
+    def _match(
+        self, detections: list[Detection]
+    ) -> tuple[list[tuple[int, int]], list[int], list[int], list]:
         # Split track set into confirmed and unconfirmed tracks.
         confirmed_tracks = [
             i for i, t in enumerate(self.tracks) if t.is_confirmed() or t.is_tentative()
@@ -179,7 +185,7 @@ class Tracker:
             for t in self.tracks
             if t.is_confirmed() or t.is_tentative()
         ]
-        detect_gt = [d.detection_data["ground_truth"] for d in detections]
+        detect_gt = [d.ground_truth for d in detections]
 
         track_idt = [
             i for i, t in enumerate(self.tracks) if t.is_confirmed() or t.is_tentative()
@@ -210,13 +216,13 @@ class Tracker:
             [cost_matrix, track_gt, detect_gt, track_idt, detect_idt],
         )
 
-    def _initiate_track(self, detection, detection_id):
+    def _initiate_track(self, detection: Detection, detection_id: int) -> None:
         new_track = Track(
             self.cfg,
             self._next_id,
             self.n_init,
             self.max_age,
-            detection_data=detection.detection_data,
+            detection_data=detection.as_legacy_dict(),
             detection_id=detection_id,
             dims=[self.A_dim, self.P_dim, self.L_dim],
         )
@@ -224,7 +230,7 @@ class Tracker:
         self.tracks.append(new_track)
         self._next_id += 1
 
-    def accumulate_vectors(self, track_ids):
+    def accumulate_vectors(self, track_ids: list[int]) -> None:
         a_features = []
         p_features = []
         l_features = []

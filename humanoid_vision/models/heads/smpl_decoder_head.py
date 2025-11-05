@@ -1,10 +1,8 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 import einops
 
-from typing import Tuple, Dict
 from dataclasses import asdict
 
 from humanoid_vision.configs.base import PhalpConfig
@@ -51,14 +49,20 @@ class SMPLTransformerDecoderHead(nn.Module):
             nn.init.xavier_uniform_(self.deccam.weight, gain=0.01)
 
         mean_params = np.load(cfg.SMPL.MEAN_PARAMS)
-        init_body_pose = torch.from_numpy(mean_params["pose"].astype(np.float32)).unsqueeze(0)
-        init_betas = torch.from_numpy(mean_params["shape"].astype("float32")).unsqueeze(0)
+        init_body_pose = torch.from_numpy(
+            mean_params["pose"].astype(np.float32)
+        ).unsqueeze(0)
+        init_betas = torch.from_numpy(mean_params["shape"].astype("float32")).unsqueeze(
+            0
+        )
         init_cam = torch.from_numpy(mean_params["cam"].astype(np.float32)).unsqueeze(0)
         self.register_buffer("init_body_pose", init_body_pose)
         self.register_buffer("init_betas", init_betas)
         self.register_buffer("init_cam", init_cam)
 
-    def forward(self, x: torch.Tensor) -> Tuple[HMRSMPLOutput, torch.Tensor, Dict[str, torch.Tensor]]:
+    def forward(
+        self, x: torch.Tensor
+    ) -> tuple[HMRSMPLOutput, torch.Tensor, dict[str, torch.Tensor]]:
         """Forward pass of the SMPL Transformer decoder head.
 
         This method takes a feature map from a backbone network and predicts SMPL parameters
@@ -101,7 +105,9 @@ class SMPLTransformerDecoderHead(nn.Module):
         for _ in range(self.cfg.MODEL.SMPL_HEAD.IEF_ITERS):
             # Input token to transformer is zero token
             if self.input_is_mean_shape:
-                token = torch.cat([pred_body_pose, pred_betas, pred_cam], dim=1)[:, None, :]
+                token = torch.cat([pred_body_pose, pred_betas, pred_cam], dim=1)[
+                    :, None, :
+                ]
             else:
                 token = torch.zeros(batch_size, 1, 1).to(x.device)
 
@@ -119,17 +125,24 @@ class SMPLTransformerDecoderHead(nn.Module):
             pred_cam_list.append(pred_cam)
 
         # Convert self.joint_rep_type -> rotmat
-        joint_conversion_fn = {"6d": rot6d_to_rotmat, "aa": lambda x: aa_to_rotmat(x.view(-1, 3).contiguous())}[
-            self.joint_rep_type
-        ]
+        joint_conversion_fn = {
+            "6d": rot6d_to_rotmat,
+            "aa": lambda x: aa_to_rotmat(x.view(-1, 3).contiguous()),
+        }[self.joint_rep_type]
 
         pred_smpl_params_list = {}
         pred_smpl_params_list["body_pose"] = torch.cat(
-            [joint_conversion_fn(pbp).view(batch_size, -1, 3, 3)[:, 1:, :, :] for pbp in pred_body_pose_list], dim=0
+            [
+                joint_conversion_fn(pbp).view(batch_size, -1, 3, 3)[:, 1:, :, :]
+                for pbp in pred_body_pose_list
+            ],
+            dim=0,
         )
         pred_smpl_params_list["betas"] = torch.cat(pred_betas_list, dim=0)
         pred_smpl_params_list["cam"] = torch.cat(pred_cam_list, dim=0)
-        pred_body_pose = joint_conversion_fn(pred_body_pose).view(batch_size, self.cfg.SMPL.NUM_BODY_JOINTS + 1, 3, 3)
+        pred_body_pose = joint_conversion_fn(pred_body_pose).view(
+            batch_size, self.cfg.SMPL.NUM_BODY_JOINTS + 1, 3, 3
+        )
 
         pred_smpl_params = HMRSMPLOutput(
             global_orient=pred_body_pose[:, [0]],

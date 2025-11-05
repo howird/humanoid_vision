@@ -3,14 +3,16 @@ name = "humanoid-vision"
 version = "0.0.1"
 description = "Humanoid Vision: Detection and Tracking of Humans"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
   "av",
+  "beartype",
   "chumpy",
   "dill",
   "einops",
   "gdown",
   "hydra-core",
+  "jaxtyping",
   "joblib",
   "numpy",
   "opencv-python",
@@ -27,13 +29,13 @@ dependencies = [
   "tyro",
   "webdataset",
   "yacs",
-
   "detectron2 @ git+https://github.com/facebookresearch/detectron2",
   "neural-renderer-pytorch @ git+https://github.com/shubham-goel/NMR",
   # "neural-renderer-pytorch @ git+https://github.com/howird/NMR",
   "pyopengl @ git+https://github.com/mmatl/pyopengl",
   "pytube @ git+https://github.com/pytube/pytube",
   "marimo",
+  "jax>=0.4.13",
 ]
 license = "MIT"
 authors = [

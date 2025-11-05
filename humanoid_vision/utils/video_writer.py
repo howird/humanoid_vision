@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Optional, Tuple, Any
+from typing import Any
 
 import cv2
 
@@ -20,7 +20,7 @@ class VideoWriter:
     Attributes:
         cfg (VideoIOConfig): Configuration for video I/O operations
         output_fps (int): Frames per second for the output video
-        video (Optional[Tuple[cv2.VideoWriter, str]]): Tuple containing video writer and path
+        video (tuple[cv2.VideoWriter, str] | None): Tuple containing video writer and path
     """
 
     def __init__(self, cfg: VideoIOConfig, fps: int):
@@ -33,8 +33,8 @@ class VideoWriter:
         """
         self.cfg = cfg
         self.output_fps = fps
-        self.video: Optional[Tuple[cv2.VideoWriter, str]] = None
-        self._video_path: Optional[Path] = None
+        self.video: tuple[cv2.VideoWriter, str] | None = None
+        self._video_path: Path | None = None
 
     def __enter__(self) -> "VideoWriter":
         return self
@@ -42,14 +42,20 @@ class VideoWriter:
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.close_video()
 
-    def save_video(self, video_path: Path, rendered_frame: Any, frame_size: Tuple[int, int], t: int = 0) -> None:
+    def save_video(
+        self,
+        video_path: Path,
+        rendered_frame: Any,
+        frame_size: tuple[int, int],
+        t: int = 0,
+    ) -> None:
         """
         Save a frame to the video file.
 
         Args:
             video_path (Path): Path where the video will be saved
             rendered_frame: The frame to be written to the video
-            frame_size (Tuple[int, int]): Size of the frame (width, height)
+            frame_size (tuple[int, int]): Size of the frame (width, height)
             t (int, optional): Frame index. Defaults to 0.
 
         Raises:
@@ -58,12 +64,17 @@ class VideoWriter:
         if t == 0:
             self._video_path = Path(video_path)
             writer = cv2.VideoWriter(
-                str(self._video_path), fourcc=cv2.VideoWriter_fourcc(*"mp4v"), fps=self.output_fps, frameSize=frame_size
+                str(self._video_path),
+                fourcc=cv2.VideoWriter_fourcc(*"mp4v"),
+                fps=self.output_fps,
+                frameSize=frame_size,
             )
             self.video = (writer, str(self._video_path))
 
         if self.video is None:
-            raise RuntimeError("Video writer is not initialized. Call save_video with t=0 first.")
+            raise RuntimeError(
+                "Video writer is not initialized. Call save_video with t=0 first."
+            )
 
         self.video[0].write(rendered_frame)
 
@@ -78,7 +89,9 @@ class VideoWriter:
                 compressed_path = self._video_path.with_name(
                     f"{self._video_path.stem}_compressed{self._video_path.suffix}"
                 )
-                ret = os.system(f"ffmpeg -hide_banner -loglevel error -y -i {self._video_path} {compressed_path}")
+                ret = os.system(
+                    f"ffmpeg -hide_banner -loglevel error -y -i {self._video_path} {compressed_path}"
+                )
                 # Delete original if compression was successful
                 if ret == 0:
                     self._video_path.unlink()

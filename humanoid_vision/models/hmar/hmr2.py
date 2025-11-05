@@ -4,6 +4,8 @@ import torch
 
 import numpy as np
 import torch.nn as nn
+from jaxtyping import Float, jaxtyped
+from beartype import beartype
 
 from humanoid_vision.utils.pylogger_phalp import get_pylogger
 from humanoid_vision.configs.base import CACHE_DIR, PhalpConfig
@@ -61,7 +63,8 @@ class HMR2023TextureSampler(nn.Module):
             anti_aliasing=False,
         )
 
-    def forward(self, x) -> HMAROutput:
+    @jaxtyped(typechecker=beartype)
+    def forward(self, x: Float[torch.Tensor, "batch 4 256 256"]) -> HMAROutput:
         # x: torch.Tensor of shape (num_valid_persons, C+1=4, H=256, W=256)
         batch = {
             "img": x[:, :3, :, :],

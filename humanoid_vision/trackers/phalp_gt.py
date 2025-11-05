@@ -32,7 +32,9 @@ class PHALPGT(PHALP):
     def setup_detectron2_with_RPN(self):
         self.detectron2_cfg = get_cfg()
         self.detectron2_cfg.merge_from_file(
-            model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_X_101_32x8d_FPN_3x.yaml")
+            model_zoo.get_config_file(
+                "COCO-InstanceSegmentation/mask_rcnn_X_101_32x8d_FPN_3x.yaml"
+            )
         )
         self.detectron2_cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5
         self.detectron2_cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST = 0.4
@@ -42,18 +44,24 @@ class PHALPGT(PHALP):
         self.detectron2_cfg.MODEL.META_ARCHITECTURE = "GeneralizedRCNN_with_proposals"
         self.detector_x = DefaultPredictor_with_RPN(self.detectron2_cfg)
 
-    def get_detections(self, image, frame_name, t_, additional_data={}, measurments=None):
+    def get_detections(
+        self, image, frame_name, t_, additional_data={}, measurments=None
+    ):
         if frame_name in additional_data.keys():
             img_height, img_width, new_image_size, left, top = measurments
 
             gt_bbox = additional_data[frame_name]["gt_bbox"]
             if len(additional_data[frame_name]["extra_data"]["gt_track_id"]) > 0:
-                ground_truth_track_id = additional_data[frame_name]["extra_data"]["gt_track_id"]
+                ground_truth_track_id = additional_data[frame_name]["extra_data"][
+                    "gt_track_id"
+                ]
             else:
                 ground_truth_track_id = [-1 for i in range(len(gt_bbox))]
 
             if len(additional_data[frame_name]["extra_data"]["gt_class"]) > 0:
-                ground_truth_annotations = additional_data[frame_name]["extra_data"]["gt_class"]
+                ground_truth_annotations = additional_data[frame_name]["extra_data"][
+                    "gt_class"
+                ]
             else:
                 ground_truth_annotations = [[] for i in range(len(gt_bbox))]
 

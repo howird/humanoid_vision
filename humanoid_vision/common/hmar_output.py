@@ -1,15 +1,26 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from jaxtyping import jaxtyped
+from beartype import beartype
+from torch import Tensor
 
-import torch
+from humanoid_vision.common.smpl_output import HMRSMPLOutput
+from humanoid_vision.common.types import (
+    CameraTranslation,
+    FocalLength,
+    Joints2D,
+    Joints3D,
+    UVImage,
+    Vertices,
+    WeakPerspCamera,
+)
 
-from humanoid_vision.common.hmr_output import HMROutput
 
-
+@jaxtyped(typechecker=beartype)
 @dataclass
-class HMAROutput(HMROutput):
+class HMAROutput(HMRSMPLOutput):
     """Output of the HMAR2 model.
 
-    Inherits from HMRSMPLOutput and adds additional fields for appearance.
+    Inherits from HMROutput and adds additional fields for appearance.
 
     Attributes:
         pred_cam: Camera parameters of shape (B, 3)
@@ -18,10 +29,17 @@ class HMAROutput(HMROutput):
         pred_keypoints_3d: 3D keypoints of shape (B, N, 3)
         pred_keypoints_2d: 2D keypoints of shape (B, N, 2)
         pred_vertices: Mesh vertices of shape (B, V, 3)
-        uv_image: TODO(howird) (B, 4, 256, 256)
-        uv_vector: TODO(howird) (B, 4, 256, 256)
+        uv_image: RGBA texture map in UV space (B, 4, 256, 256)
+        uv_vector: Processed UV texture for autoencoder (B, 4, 256, 256)
         losses: Optional dictionary of losses
     """
 
-    uv_image: torch.Tensor = field(default_factory=lambda: ValueError("must provide uv_image"))
-    uv_vector: torch.Tensor = field(default_factory=lambda: ValueError("must provide uv_vector"))
+    pred_cam: WeakPerspCamera
+    pred_cam_t: CameraTranslation
+    focal_length: FocalLength
+    pred_keypoints_3d: Joints3D
+    pred_keypoints_2d: Joints2D
+    pred_vertices: Vertices
+    uv_image: UVImage
+    uv_vector: UVImage
+    losses: dict[str, Tensor] | None = None

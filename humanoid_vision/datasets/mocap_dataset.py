@@ -1,5 +1,4 @@
 import numpy as np
-from typing import Dict
 
 
 class MoCapDataset:
@@ -15,7 +14,7 @@ class MoCapDataset:
         self.betas = data["betas"].astype(np.float32)
         self.length = len(self.pose)
 
-    def __getitem__(self, idx: int) -> Dict:
+    def __getitem__(self, idx: int) -> dict:
         pose = self.pose[idx].copy()
         betas = self.betas[idx].copy()
         item = {"body_pose": pose, "betas": betas}

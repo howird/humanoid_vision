@@ -1,6 +1,6 @@
-import torch
-
 from dataclasses import dataclass
+
+from humanoid_vision.common.types import Betas, BodyPose, GlobalOrient
 
 
 @dataclass
@@ -13,6 +13,6 @@ class HMRSMPLOutput:
         betas: Shape parameters of shape (B, 10)
     """
 
-    global_orient: torch.Tensor
-    body_pose: torch.Tensor
-    betas: torch.Tensor
+    global_orient: GlobalOrient
+    body_pose: BodyPose
+    betas: Betas

@@ -124,9 +124,19 @@ def create_fast_tracklets(data):
         else:
             array_smpl.append(-1)
         array_frame_name.append(frame_data["frame_name"])
-        array_frame_size.append(np.array(frame_data["size"]) if frame_data["has_detection"] else np.array([0, 0]))
-        array_frame_bbox.append(frame_data["bbox"] if frame_data["has_detection"] else np.array([0.0, 0.0, 0.0, 0.0]))
-        array_frame_conf.append(frame_data["conf"] if frame_data["has_detection"] else 0)
+        array_frame_size.append(
+            np.array(frame_data["size"])
+            if frame_data["has_detection"]
+            else np.array([0, 0])
+        )
+        array_frame_bbox.append(
+            frame_data["bbox"]
+            if frame_data["has_detection"]
+            else np.array([0.0, 0.0, 0.0, 0.0])
+        )
+        array_frame_conf.append(
+            frame_data["conf"] if frame_data["has_detection"] else 0
+        )
 
     return {
         "fid": array_fid,

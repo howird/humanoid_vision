@@ -3,15 +3,21 @@ Modified code from https://github.com/nwojke/deep_sort
 """
 
 import copy
-from typing import Optional
 
+from jaxtyping import Float, jaxtyped
+from beartype import beartype
 import numpy as np
+from numpy import ndarray
 
 from humanoid_vision.models.hmar.hmar import HMAR
 from humanoid_vision.deep_sort.feature_distances import get_pose_distance
 
 
-def _pdist_l2(a, b):
+@jaxtyped(typechecker=beartype)
+def _pdist_l2(
+    a: Float[ndarray, "num_a features"],
+    b: Float[ndarray, "num_b features"],
+) -> Float[ndarray, "num_a num_b"]:
     """Compute pair-wise squared l2 distances between points in `a` and `b`."""
     a, b = np.asarray(a), np.asarray(b)
     if len(a) == 0 or len(b) == 0:
@@ -23,7 +29,14 @@ def _pdist_l2(a, b):
     return r2
 
 
-def _pdist(a, b, prediction_features, distance_type, shot, HMAR: Optional[HMAR] = None):
+def _pdist(
+    a: list,
+    b: list,
+    prediction_features: str,
+    distance_type: str,
+    shot: int,
+    HMAR: HMAR | None = None,
+) -> Float[ndarray, "num_tracks num_detections"]:
     a_appe, a_loca, a_pose, a_uv = [], [], [], []
     for i_ in range(len(a)):
         a_appe.append(a[i_][0])
@@ -126,7 +139,10 @@ def _pdist(a, b, prediction_features, distance_type, shot, HMAR: Optional[HMAR] 
     return ruv2
 
 
-def _nn_euclidean_distance_min(x, y, *args, **kwargs):
+@jaxtyped(typechecker=beartype)
+def _nn_euclidean_distance_min(
+    x: list, y: list, *args, **kwargs
+) -> Float[ndarray, "num_detections"]:
     """Helper function for nearest neighbor distance metric (Euclidean).
 
     Parameters
@@ -165,7 +181,7 @@ class NearestNeighborDistanceMetric:
 
     Attributes
     ----------
-    samples : Dict[int -> List[ndarray]]
+    samples : dict[int -> list[ndarray]]
         A dictionary that maps from target identities to the list of samples
         that have been observed so far.
 
@@ -178,7 +194,7 @@ class NearestNeighborDistanceMetric:
         matching_threshold,
         budget,
         shot,
-        hmar: Optional[HMAR] = None,
+        hmar: HMAR | None = None,
     ):
         self.prediction_features = predict
         self.distance_type = distance_type
@@ -206,7 +222,7 @@ class NearestNeighborDistanceMetric:
             An NxM matrix of N features of dimensionality M.
         targets : ndarray
             An integer array of associated target identities.
-        active_targets : List[int]
+        active_targets : list[int]
             A list of targets that are currently present in the scene.
         """
         for appe_feature, loca_feature, pose_feature, uv_map, target in zip(
@@ -227,7 +243,7 @@ class NearestNeighborDistanceMetric:
         ----------
         features : ndarray
             An NxM matrix of N features of dimensionality M.
-        targets : List[int]
+        targets : list[int]
             A list of targets to match the given `features` against.
 
         Returns
