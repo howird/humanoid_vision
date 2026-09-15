@@ -85,3 +85,8 @@ UVImage: TypeAlias = Float[Tensor, f"batch {UV_CHANNELS} {UV_RES} {UV_RES}"]
 TrackID: TypeAlias = int
 CostMatrix: TypeAlias = Float[ndarray, "num_tracks num_detections"]
 Matches: TypeAlias = list[tuple[int, int]]  # List of (track_idx, detection_idx)
+
+# HMAR forward helpers
+Flow: TypeAlias = Float[Tensor, "batch 2 256 256"]
+PoseEmbedTensor: TypeAlias = Float[Tensor, "batch pose_embedding"]
+SMPLParams: TypeAlias = Float[Tensor, "batch smpl_params"]

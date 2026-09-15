@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Mapping, Iterator, Any
 from jaxtyping import jaxtyped
 from beartype import beartype
 from torch import Tensor
@@ -9,6 +10,9 @@ from humanoid_vision.common.types import (
     FocalLength,
     Joints2D,
     Joints3D,
+    Flow,
+    PoseEmbedTensor,
+    SMPLParams,
     UVImage,
     Vertices,
     WeakPerspCamera,
@@ -43,3 +47,14 @@ class HMAROutput(HMRSMPLOutput):
     uv_image: UVImage
     uv_vector: UVImage
     losses: dict[str, Tensor] | None = None
+
+
+@jaxtyped(typechecker=beartype)
+@dataclass
+class HMARForwardOutput:
+    uv_image: UVImage
+    uv_vector: UVImage
+    flow: Flow
+    pose_emb: PoseEmbedTensor
+    pose_smpl: SMPLParams
+    pred_cam: WeakPerspCamera

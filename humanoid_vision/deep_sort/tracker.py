@@ -2,20 +2,21 @@
 Modified code from https://github.com/nwojke/deep_sort
 """
 
-from __future__ import absolute_import
 import torch
 import numpy as np
 
 from humanoid_vision.common.track import Track
 from humanoid_vision.common.detection import Detection
 from humanoid_vision.configs.base import PhalpConfig
+
 from humanoid_vision.deep_sort.nn_matching import NearestNeighborDistanceMetric
 from humanoid_vision.deep_sort.linear_assignment import matching_simple
 from humanoid_vision.deep_sort.forward_prediction import (
     predict_future_location,
     predict_future_pose,
 )
-from humanoid_vision.models.hmar.hmar import HMAR
+
+from humanoid_vision.models.hmar import HMAR
 from humanoid_vision.models.predictors.pose_transformer_v2 import PoseTransformerV2
 
 np.set_printoptions(formatter={"float": "{: 0.3f}".format})

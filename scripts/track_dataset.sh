@@ -71,7 +71,7 @@ for i in "${!GAME_NAMES[@]}"; do
         match($NF, /shot([0-9]+)\.mp4/, arr);
         if (arr[1] >= min) print $0;
     }' | \
-    xargs -I {} python scripts/hmr_track.py "{}" --video.output_dir "${OUTPUT_DIR}"
+    xargs -I {} python scripts/track.py "{}" --video-io.output-dir "${OUTPUT_DIR}"
 done
 
 echo "All ${TOTAL_GAMES} games processed!"

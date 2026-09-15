@@ -1,6 +1,14 @@
+from __future__ import annotations
+
 import numpy as np
 import torch
 import torch.nn as nn
+from torch import Tensor
+
+from os import PathLike
+from typing import Optional
+
+from jaxtyping import Float
 
 from humanoid_vision.configs.base import PhalpConfig
 from humanoid_vision.models.backbones.resnet import resnet
@@ -9,6 +17,7 @@ from humanoid_vision.models.heads.encoding_head import EncodingHead
 from humanoid_vision.models.heads.smpl_mlp_head import SMPLHead
 from humanoid_vision.models.smpl_wrapper import SMPL
 from humanoid_vision.utils.utils import compute_uvsampler, perspective_projection
+from humanoid_vision.common.hmar_output import HMARForwardOutput
 
 
 class HMAR(nn.Module):
@@ -46,7 +55,7 @@ class HMAR(nn.Module):
             cfg, input_dim=cfg.MODEL.SMPL_HEAD.IN_CHANNELS, pool="pooled"
         )
 
-    def load_weights(self, path):
+    def load_weights(self, path: str | PathLike[str]) -> None:
         checkpoint_file = torch.load(path)
         state_dict_filt = {}
         for k, v in checkpoint_file["model"].items():
@@ -59,7 +68,10 @@ class HMAR(nn.Module):
                 state_dict_filt.setdefault(k[5:].replace("smplx", "smpl"), v)
         self.load_state_dict(state_dict_filt, strict=False)
 
-    def forward(self, x):
+    def forward(
+        self, x: Float[Tensor, "batch channels 256 256"]
+    ) -> HMARForwardOutput:
+        """Run the full HMAR forward pass producing texture, pose, and camera outputs."""
         feats, skips = self.backbone(x)
         flow = self.texture_head(skips)
         uv_image = self.flow_to_texture(flow, x)
@@ -69,19 +81,20 @@ class HMAR(nn.Module):
         with torch.no_grad():
             pred_smpl_params, pred_cam, _ = self.smpl_head(pose_embeddings)
 
-        out = {
-            "uv_image": uv_image,  # raw uv_image
-            "uv_vector": self.process_uv_image(
-                uv_image
-            ),  # preprocessed uv_image for the autoencoder
-            "flow": flow,
-            "pose_emb": pose_embeddings,
-            "pose_smpl": pred_smpl_params,
-            "pred_cam": pred_cam,
-        }
+        out = HMARForwardOutput(
+            uv_image=uv_image,
+            uv_vector=self.process_uv_image(uv_image),
+            flow=flow,
+            pose_emb=pose_embeddings,
+            pose_smpl=pred_smpl_params,
+            pred_cam=pred_cam,
+        )
         return out
 
-    def process_uv_image(self, uv_image):
+    def process_uv_image(
+        self, uv_image: Float[Tensor, "batch uv_channels 256 256"]
+    ) -> Float[Tensor, "batch uv_channels 256 256"]:
+        """Normalize UV images and encode the visibility mask for downstream modules."""
         uv_mask = uv_image[:, 3:, :, :]
         uv_image = uv_image[:, :3, :, :] / 5.0
         zeros_ = uv_mask == 0
@@ -95,12 +108,22 @@ class HMAR(nn.Module):
 
         return uv_vector
 
-    def flow_to_texture(self, flow_map, img_x):
+    def flow_to_texture(
+        self,
+        flow_map: Float[Tensor, "batch 2 256 256"],
+        img_x: Float[Tensor, "batch channels 256 256"],
+    ) -> Float[Tensor, "batch channels 256 256"]:
+        """Sample the input image with the predicted flow field to construct UV textures."""
         flow_map = flow_map.permute(0, 2, 3, 1)
         uv_images = torch.nn.functional.grid_sample(img_x, flow_map)
         return uv_images
 
-    def autoencoder_hmar(self, x, en=True):
+    def autoencoder_hmar(
+        self,
+        x: Float[Tensor, "batch channels height width"],
+        en: bool = True,
+    ) -> Tensor:
+        """Encode or decode UV textures via the appearance autoencoder."""
         if en == True:
             if self.cfg.phalp.encode_type == "3c":
                 return self.encoding_head(x[:, :3, :, :], en=en)
@@ -111,12 +134,17 @@ class HMAR(nn.Module):
 
     def get_3d_parameters(
         self,
-        pred_joints,
-        pred_cam,
-        center=np.array([128, 128]),
-        img_size=256,
-        scale=None,
-    ):
+        pred_joints: Float[Tensor, "batch joints 3"],
+        pred_cam: Float[Tensor, "batch 3"],
+        center: np.ndarray = np.array([128, 128]),
+        img_size: int = 256,
+        scale: Optional[Float[np.ndarray, "batch 1"]] = None,
+    ) -> tuple[
+        Float[Tensor, "batch joints_with_root 2"],
+        Float[Tensor, "batch joints_with_root 3"],
+        Float[Tensor, "batch 3"],
+    ]:
+        """Convert weak-perspective camera parameters into 3D translations and keypoints."""
         if scale is not None:
             pass
         else:
@@ -170,7 +198,12 @@ class HMAR(nn.Module):
 
         return pred_keypoints_2d_smpl, pred_joints, pred_cam_t
 
-    def get_uv_distance(self, t_uv, d_uv):
+    def get_uv_distance(
+        self,
+        t_uv: Float[np.ndarray, "4 256 256"],
+        d_uv: Float[np.ndarray, "4 256 256"],
+    ) -> tuple[np.ndarray, np.ndarray, float]:
+        """Compute appearance embeddings and mask overlap statistics for two UV maps."""
         t_uv = torch.from_numpy(t_uv).cuda().float()
         d_uv = torch.from_numpy(d_uv).cuda().float()
         d_mask = d_uv[3:, :, :] > 0.5

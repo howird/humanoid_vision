@@ -9,7 +9,7 @@ from beartype import beartype
 import numpy as np
 from numpy import ndarray
 
-from humanoid_vision.models.hmar.hmar import HMAR
+from humanoid_vision.models.hmar import HMAR
 from humanoid_vision.deep_sort.feature_distances import get_pose_distance
 
 

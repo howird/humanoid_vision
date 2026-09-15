@@ -115,8 +115,8 @@ class Renderer:
         self.roughnessFactor = roughnessFactor
 
     # TODO(howird): causes error when there are few frames, not sure why (or if the few frames is the actual problem)
-    # def __del__(self):
-    #     del self.renderer
+    def __del__(self):
+        del self.renderer
 
     def visualize_all(
         self, vertices, camera_translation, color, images, use_image=True

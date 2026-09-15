@@ -12,7 +12,9 @@ import torch
 
 from humanoid_vision.common.detection import Detection
 from humanoid_vision.common.hmar_output import HMAROutput
-from humanoid_vision.models.hmar.hmr2 import HMR2023TextureSampler
+from humanoid_vision.models.hmr2 import HMR2
+from humanoid_vision.models.hmar import HMAR
+from humanoid_vision.utils.uv_texture_renderer import UVTextureRenderer
 from humanoid_vision.common.types import (
     AppearanceEmbed,
     BBoxes,
@@ -82,7 +84,9 @@ def crop_and_preprocess_detections(
 
 @jaxtyped(typechecker=beartype)
 def extract_hmr_features(
-    hmr_model: HMR2023TextureSampler,
+    hmr2_model: HMR2,
+    hmar_model: HMAR,
+    uv_renderer: UVTextureRenderer,
     masked_images: Float[torch.Tensor, "batch 4 256 256"],
     centers: list[Float[ndarray, "2"]],
     scales: list[Float[ndarray, "2"]],
@@ -100,7 +104,9 @@ def extract_hmr_features(
     """Extract appearance, pose, and location features using HMR model.
 
     Args:
-        hmr_model: HMR2023TextureSampler model
+        hmr2_model: HMR2 model instance (pose/shape)
+        hmar_model: HMAR model instance (appearance/UV processing)
+        uv_renderer: UVTextureRenderer for texture sampling
         masked_images: Preprocessed RGBA crops (num_persons, 4, 256, 256)
         centers: Bounding box centers
         scales: Bounding box scales
@@ -131,16 +137,52 @@ def extract_hmr_features(
         )
 
     with torch.no_grad():
-        # Run HMR forward pass
-        hmar_out: HMAROutput = hmr_model(masked_images.cuda())
+        # Ensure tensor is on the same device as HMR2
+        device = next(hmr2_model.parameters()).device
+        x = masked_images.to(device)
+        batch = {
+            "img": x[:, :3, :, :],
+            "mask": (x[:, 3, :, :]).clip(0, 1),
+        }
+        # Run HMR2 forward pass
+        model_out = hmr2_model(batch)
+
+        # Prepare faces tensor for UV rendering
+        faces = torch.as_tensor(
+            hmr2_model.smpl.faces.astype(np.int64),
+            dtype=torch.long,
+            device=model_out.pred_vertices.device,
+        )
+
+        # Render UV image and process to UV vector
+        uv_image = uv_renderer.render_uv_image(
+            model_out.pred_vertices,
+            model_out.pred_cam_t,
+            faces,
+            batch["img"],
+            batch["mask"],
+        )
+        hmar_out: HMAROutput = HMAROutput(
+            uv_image=uv_image,
+            uv_vector=hmar_model.process_uv_image(uv_image),
+            global_orient=model_out.global_orient,
+            body_pose=model_out.body_pose,
+            betas=model_out.betas,
+            pred_cam=model_out.pred_cam,
+            pred_cam_t=model_out.pred_cam_t,
+            focal_length=model_out.focal_length,
+            pred_keypoints_3d=model_out.pred_keypoints_3d,
+            pred_keypoints_2d=model_out.pred_keypoints_2d,
+            pred_vertices=model_out.pred_vertices,
+        )
 
         # Extract appearance embedding from UV texture
         uv_vector = hmar_out.uv_vector
-        appe_embedding = hmr_model.hmar.autoencoder_hmar(uv_vector, en=True)
+        appe_embedding = hmar_model.autoencoder_hmar(uv_vector, en=True)
         appe_embedding = appe_embedding.view(appe_embedding.shape[0], -1)
 
         # Get 3D joints from SMPL
-        pred_joints = hmr_model.smpl(hmar_out).joints
+        pred_joints = hmr2_model.smpl(hmar_out).joints
 
         # Compute camera parameters and project to 2D
         left, top = img_offset
@@ -149,7 +191,7 @@ def extract_hmr_features(
         centers_array = np.array(centers)
         scales_array = np.array(scales)
 
-        pred_joints_2d, pred_joints, pred_cam = hmr_model.hmar.get_3d_parameters(
+        pred_joints_2d, pred_joints, pred_cam = hmar_model.get_3d_parameters(
             pred_joints,
             hmar_out.pred_cam,
             center=(centers_array + np.array([left, top])) * ratio,

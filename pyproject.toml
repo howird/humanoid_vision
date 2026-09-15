@@ -32,7 +32,7 @@ dependencies = [
   "detectron2 @ git+https://github.com/facebookresearch/detectron2",
   "neural-renderer-pytorch @ git+https://github.com/shubham-goel/NMR",
   # "neural-renderer-pytorch @ git+https://github.com/howird/NMR",
-  "pyopengl @ git+https://github.com/mmatl/pyopengl",
+  "pyopengl",
   "pytube @ git+https://github.com/pytube/pytube",
   "marimo",
   "jax>=0.4.13",
